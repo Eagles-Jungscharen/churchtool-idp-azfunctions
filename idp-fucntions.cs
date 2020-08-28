@@ -17,6 +17,7 @@ namespace EaglesJungscharen.CT.IDP.Functions
     public static class Authenticate
     {
         static readonly HttpClient httpClient = new HttpClient(new HttpClientHandler(){UseCookies=false});
+        static readonly JWTService jwtService = new JWTService();
         [FunctionName("authenticate")]
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req,
@@ -35,9 +36,10 @@ namespace EaglesJungscharen.CT.IDP.Functions
             }
             string ctURL = System.Environment.GetEnvironmentVariable("CT_URL");
             CTLoginService service = new CTLoginService(ctURL);
-            CTLoginResponse lr =  await service.DoLogin(username,password,httpClient);
-            if (lr.status.Equals("success")) {
-                return new OkObjectResult(lr);
+            LoginResult lr =  await service.DoLogin(username,password,httpClient);
+            if (!lr.Error) {
+                CTWhoami cTWhoami = await service.GetWhoAmi(lr.SetCookieHeader,httpClient);
+                return new OkObjectResult(cTWhoami);
             }
             return new UnauthorizedResult();
         }
