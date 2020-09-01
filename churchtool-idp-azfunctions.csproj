@@ -5,6 +5,7 @@
     <RootNamespace>churchtool_idp_azfunctions</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.WebJobs.Extensions.Storage" Version="4.0.2" />
     <PackageReference Include="Microsoft.NET.Sdk.Functions" Version="1.0.36" />
   </ItemGroup>
   <ItemGroup>
