@@ -26,11 +26,13 @@ namespace EaglesJungscharen.CT.IDP.Functions
             ILogger log)
         {
             log.LogInformation("Login requestes");
+            FunctionContext<dynamic> fc = new FunctionContext<dynamic>(log,req,cloudTable);
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             dynamic data = JsonConvert.DeserializeObject(requestBody);
             if (data == null) {
                 return new BadRequestObjectResult("No Payload available");
             }
+            fc.PayLoad = data;
             string username = data.username;
             string password = data.password;
             if (String.IsNullOrEmpty(username) || String.IsNullOrEmpty(password)) {
@@ -39,9 +41,12 @@ namespace EaglesJungscharen.CT.IDP.Functions
             string ctURL = System.Environment.GetEnvironmentVariable("CT_URL");
             CTLoginService service = new CTLoginService(ctURL);
             LoginResult lr =  await service.DoLogin(username,password,httpClient);
+            log.LogInformation("Result: "+lr.Error);
             if (!lr.Error) {
                 CTWhoami cTWhoami = await service.GetWhoAmi(lr.SetCookieHeader,httpClient);
-                return new OkObjectResult(cTWhoami);
+                Tokens tokens = await jwtService.BuildJWTToken(cTWhoami, fc);
+                log.LogInformation("here is the token" + tokens);
+                return new OkObjectResult(tokens);
             }
             return new UnauthorizedResult();
         }
