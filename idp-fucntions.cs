@@ -45,7 +45,6 @@ namespace EaglesJungscharen.CT.IDP.Functions
             if (!lr.Error) {
                 CTWhoami cTWhoami = await service.GetWhoAmi(lr.SetCookieHeader,httpClient);
                 Tokens tokens = await jwtService.BuildJWTToken(cTWhoami, fc);
-                log.LogInformation("here is the token" + tokens);
                 return new OkObjectResult(tokens);
             }
             return new UnauthorizedResult();

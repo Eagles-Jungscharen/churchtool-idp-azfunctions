@@ -12,6 +12,8 @@ using EaglesJungscharen.CT.IDP.Models;
 namespace EaglesJungscharen.CT.IDP.Services {
     public class JWTService {
 
+        public static int Expires_In_AccessToken = 3600;
+        public static int Expires_In_PrivateKey = 43200;
         private RSA privateRSAKey;
         private string keyId;
         public JWTService() {
@@ -21,36 +23,38 @@ namespace EaglesJungscharen.CT.IDP.Services {
            RSA rsa = RSA.Create();
            this.privateRSAKey = rsa;
            this.keyId = Guid.NewGuid().ToString();
-           await storePublicKey(fc,rsa.ExportRSAPublicKey());
-           await storePrivateKey(fc, rsa.ExportRSAPrivateKey(), rsa.ExportRSAPublicKey());
+           DateTime expiresIn = DateTime.Now;
+           expiresIn = expiresIn.AddSeconds(JWTService.Expires_In_PrivateKey);
+           await storePublicKey(fc,rsa.ExportRSAPublicKey(), expiresIn);
+           await storePrivateKey(fc, rsa.ExportRSAPrivateKey(), expiresIn);
         }
 
-        private async Task storePublicKey(FunctionContext<dynamic> fc, byte[] pkAsBytes) {
+        private async Task storePublicKey(FunctionContext<dynamic> fc, byte[] pkAsBytes, DateTime expiresIn) {
             PublicKeyTE pk = new PublicKeyTE();
             pk.PartitionKey = "ACCESS_PK";
             pk.RowKey = this.keyId;
+            pk.Expires = expiresIn;
             pk.AssignPublicKey(pkAsBytes);
             TableOperation insertOrMerge = TableOperation.InsertOrMerge(pk);
             await fc.Table.ExecuteAsync(insertOrMerge);
         }
 
-        private async Task storePrivateKey(FunctionContext<dynamic> fc, byte[] privateKeyAsBytes, byte [] publicKeyAsBytes) {
+        private async Task storePrivateKey(FunctionContext<dynamic> fc, byte[] privateKeyAsBytes, DateTime expiresIn) {
             PrivateKeyTE pk = new PrivateKeyTE();
             pk.PartitionKey = "ACCESS_PRIVATE";
             pk.RowKey = "LATEST";
             pk.PublicKeyId = this.keyId;
+            pk.Expires = expiresIn;
             pk.AssignePrivateKey(privateKeyAsBytes);
-            pk.AssignePublicKey(publicKeyAsBytes);
-            TableOperation insertOrMerge = TableOperation.InsertOrMerge(pk);
+            TableOperation insertOrMerge = TableOperation.InsertOrReplace(pk);
             await fc.Table.ExecuteAsync(insertOrMerge);
-
         }
         public async Task<Tokens> BuildJWTToken(CTWhoami whoami, FunctionContext<dynamic> fc) {
             await checkKeys(fc);
             string idToken = createIDToken(whoami, fc);
             string accessToken = createAccessToken(whoami, fc);
-            string refreshToken = createRefreshToken(fc);
-            return Tokens.BuildTokens(idToken, accessToken, refreshToken);
+            string refreshToken = createRefreshToken(fc, accessToken);
+            return Tokens.BuildTokens(idToken, accessToken, refreshToken, JWTService.Expires_In_AccessToken);
         }
 
         private async Task checkKeys(FunctionContext<dynamic> fc){
@@ -70,13 +74,19 @@ namespace EaglesJungscharen.CT.IDP.Services {
             if (pke == null) {
                 fc.Log.LogInformation("No private key found.");
                 return false;
+            } else {
+                fc.Log.LogInformation("Private Key found with PKID: {PublicKeyId}", pke.PublicKeyId);
+                if (pke.Expires != null && DateTime.Now < pke.Expires) {
+                    this.keyId = pke.PublicKeyId;
+                    RSA rsa = RSA.Create();
+                    rsa.ImportRSAPrivateKey(Convert.FromBase64String(pke.PrivateKey), out _);
+                    this.privateRSAKey = rsa;
+                    return true;
+                } else {
+                    fc.Log.LogInformation("Private Key is expired!");
+                    return false;
+                }
             }
-            fc.Log.LogInformation("Private Key found: ", pke);
-            this.keyId = pke.PublicKeyId;
-            RSA rsa = RSA.Create();
-            rsa.ImportRSAPrivateKey(Convert.FromBase64String(pke.PrivateKey), out _);
-            this.privateRSAKey = rsa;
-            return true;
         }
 
         private string createIDToken(CTWhoami whoami, FunctionContext<dynamic> fc) {
@@ -90,7 +100,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             var unixTimeSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
 
             var jwt = new JwtSecurityToken(
-                audience: "ct.test.",
+                audience: "ct.auth",
                 issuer: "CT_IDP",
                 claims: new Claim[] {
                     new Claim(JwtRegisteredClaimNames.Iat, unixTimeSeconds.ToString(), ClaimValueTypes.Integer64),
@@ -100,7 +110,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
                     new Claim("email", whoami.email)
                 },
                 notBefore: now,
-                expires: now.AddMinutes(30),
+                expires: now.AddSeconds(JWTService.Expires_In_AccessToken),
                 signingCredentials: signingCredentials
             );
             return new JwtSecurityTokenHandler().WriteToken(jwt);
@@ -127,33 +137,23 @@ namespace EaglesJungscharen.CT.IDP.Services {
                     new Claim("email", whoami.email)
                 },
                 notBefore: now,
-                expires: now.AddMinutes(30),
+                expires: now.AddSeconds(JWTService.Expires_In_AccessToken),
                 signingCredentials: signingCredentials
             );
             return new JwtSecurityTokenHandler().WriteToken(jwt);
         }
-    private string createRefreshToken(FunctionContext<dynamic> fc) {
-            RsaSecurityKey rsaKey = new RsaSecurityKey(this.privateRSAKey);
-            rsaKey.KeyId = this.keyId;
-            var signingCredentials = new SigningCredentials(rsaKey, SecurityAlgorithms.RsaSha256)
-            {
-                CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false }
-            };
-            var now = DateTime.Now;
-            var unixTimeSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
-
-            var jwt = new JwtSecurityToken(
-                audience: "ct.test.",
-                issuer: "CT_IDP",
-                claims: new Claim[] {
-                    new Claim(JwtRegisteredClaimNames.Iat, unixTimeSeconds.ToString(), ClaimValueTypes.Integer64),
-                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-                },
-                notBefore: now,
-                expires: now.AddMinutes(30),
-                signingCredentials: signingCredentials
-            );
-            return new JwtSecurityTokenHandler().WriteToken(jwt);
+        private string createRefreshToken(FunctionContext<dynamic> fc, string accessToken) {
+            DateTime expiresIn = DateTime.Now;
+            expiresIn.AddSeconds(JWTService.Expires_In_AccessToken);
+            string refreshToken = Guid.NewGuid().ToString();
+            RefreshTokenTE rtTE = new RefreshTokenTE();
+            rtTE.AccessToken = accessToken;
+            rtTE.Expires = expiresIn;
+            rtTE.RowKey = refreshToken;
+            rtTE.PartitionKey = "REFRESH_TOKEN";
+            TableOperation insertOrMerge = TableOperation.InsertOrMerge(rtTE);
+            fc.Table.ExecuteAsync(insertOrMerge);
+            return refreshToken;
         }
     }
 }
