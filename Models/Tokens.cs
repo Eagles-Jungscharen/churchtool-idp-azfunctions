@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 namespace EaglesJungscharen.CT.IDP.Models {
 
     public class Tokens {
@@ -8,8 +9,11 @@ namespace EaglesJungscharen.CT.IDP.Models {
             tokens.RefreshToken = refreshToken;
             return tokens;
         }
+        [JsonProperty("id_token")]
         public string IdToken {set;get;}
+        [JsonProperty("access_token")]
         public string AccessToken{set;get;}
+        [JsonProperty("refresh_token")]
         public string RefreshToken {set;get;}
     }
 }
