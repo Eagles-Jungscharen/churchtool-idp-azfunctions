@@ -60,10 +60,10 @@ namespace EaglesJungscharen.CT.IDP.Functions
         {
             FunctionContext<dynamic> fc = new FunctionContext<dynamic>(log,req,cloudTable);
             var jwkKeys = jWKService.GetPublicKeys(fc);
-            return new JsonResult( JsonConvert.SerializeObject(new {keys= jwkKeys}, new JsonSerializerSettings() 
+            return new JsonResult( new {keys= jwkKeys}, new JsonSerializerSettings() 
             { 
-                NullValueHandling = NullValueHandling.Ignore 
-            }));
+                NullValueHandling = NullValueHandling.Ignore
+            });
         }
     }
 }
