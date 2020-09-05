@@ -4,12 +4,19 @@ using EaglesJungscharen.CT.IDP.Models;
 using System.Linq;
 using System.Collections.Generic;
 using System;
+using Microsoft.Azure.Cosmos.Table;
+using Microsoft.Azure.Cosmos.Table.Queryable;
+
 namespace EaglesJungscharen.CT.IDP.Services {
     public class JWKService {
 
         
-        public List<JsonWebKey> GetPublicKeys(FunctionContext<dynamic> fc) { 
-            return null;
+        public IEnumerable<JsonWebKey> GetPublicKeys(FunctionContext<dynamic> fc) {
+            
+            string filter = TableQuery.GenerateFilterCondition("PartitionKey", QueryComparisons.Equal, "ACCESS_PK");
+            TableQuery<PublicKeyTE> employeeQuery = new TableQuery<PublicKeyTE>().Where(filter);
+            IEnumerable<PublicKeyTE> allPK = fc.Table.ExecuteQuery(employeeQuery);
+            return allPK.Select(pke=>this.GetJWKFromPK(pke));
 
        }
 
