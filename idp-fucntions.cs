@@ -50,4 +50,20 @@ namespace EaglesJungscharen.CT.IDP.Functions
             return new UnauthorizedResult();
         }
     }
+
+    public static class GetPublicKeys 
+    {
+        private static readonly JWKService jWKService = new JWKService();
+        [FunctionName("well-known")]
+        public static async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Anonymous, "post","get", Route = "jwks.json")] HttpRequest req, [Table("PublicKeys")] CloudTable cloudTable,
+            ILogger log) 
+        {
+            FunctionContext<dynamic> fc = new FunctionContext<dynamic>(log,req,cloudTable);
+            var jwkKeys = jWKService.GetPublicKeys(fc);
+            return new JsonResult( new {keys= jwkKeys}, new JsonSerializerSettings() 
+            { 
+                NullValueHandling = NullValueHandling.Ignore
+            });
+        }
+    }
 }
