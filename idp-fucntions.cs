@@ -12,6 +12,9 @@ using Newtonsoft.Json;
 using System.Net.Http;
 using EaglesJungscharen.CT.IDP.Models;
 using EaglesJungscharen.CT.IDP.Services;
+using System.Linq;
+using System.Collections.Generic;
+
 
 namespace EaglesJungscharen.CT.IDP.Functions
 {
@@ -65,5 +68,37 @@ namespace EaglesJungscharen.CT.IDP.Functions
                 NullValueHandling = NullValueHandling.Ignore
             });
         }
+    }
+
+    public static class RefreshToken {
+        static readonly JWTService jwtService = new JWTService();
+        [FunctionName("refresh")]
+        public static async Task<IActionResult> Run(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req, [Table("PublicKeys")] CloudTable cloudTable,
+            ILogger log)
+        {
+            log.LogInformation("Refresh requestes");
+            FunctionContext<dynamic> fc = new FunctionContext<dynamic>(log,req,cloudTable);
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            String accessToken = req.Headers.First(header=>header.Key== "Authorization").Value;
+            if (accessToken == null || !accessToken.StartsWith("Bearer")) {
+                return new UnauthorizedResult();
+            }
+            dynamic data = JsonConvert.DeserializeObject(requestBody);
+            if (data == null) {
+                return new BadRequestObjectResult("No Payload available");
+            }
+            if (data.refreshToken == null) {
+                return new BadRequestObjectResult("No refreshToken submitted");
+            }
+            string refreshToken = data.refreshToken;
+            string accessTokenShort = accessToken.Substring(7);
+            if (jwtService.CheckRefreshToken(fc,refreshToken,accessTokenShort)) {
+                Tokens tokens = await jwtService.CreateNewTokenFromAccessToken(fc,accessTokenShort);
+                return new OkObjectResult(tokens);
+            }
+            return new BadRequestObjectResult("Refresh and access Token Combination not valid");
+        }
+        
     }
 }
