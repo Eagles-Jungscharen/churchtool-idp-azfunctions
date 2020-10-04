@@ -159,12 +159,16 @@ namespace EaglesJungscharen.CT.IDP.Services {
         }
 
         public bool CheckRefreshToken(FunctionContext<dynamic> fc, string refreshToken, string accessToken) {
-            string filter =TableQuery.CombineFilters( TableQuery.GenerateFilterCondition("PartitionKey",QueryComparisons.Equal, "RERESH_TOKEN"), TableOperators.And,
+            string filter =TableQuery.CombineFilters( TableQuery.GenerateFilterCondition("PartitionKey",QueryComparisons.Equal, "REFRESH_TOKEN"), TableOperators.And,
+            
             TableQuery.GenerateFilterCondition("RowKey",QueryComparisons.Equal,refreshToken));
+            fc.Log.LogInformation(filter);
             IEnumerable<RefreshTokenTE> res = fc.Table.ExecuteQuery(new TableQuery<RefreshTokenTE>().Where(filter));
             if (res.Any()) {
                 RefreshTokenTE token = res.First();
+                
                 if (token.AccessToken.Equals(accessToken)) {
+                    fc.Table.Execute(TableOperation.Delete(token));
                     return true;
                 } else {
                     return false;
@@ -179,8 +183,8 @@ namespace EaglesJungscharen.CT.IDP.Services {
             JwtSecurityToken token = jsth.ReadJwtToken(accessToken);
             CTWhoami cTWhoami = new CTWhoami();
             cTWhoami.firstName = token.Claims.First(claim=>claim.Type == "firstname" ).Value;
-            cTWhoami.firstName = token.Claims.First(claim=>claim.Type == "lastname" ).Value;
-            cTWhoami.firstName = token.Claims.First(claim=>claim.Type == "email" ).Value;
+            cTWhoami.lastName = token.Claims.First(claim=>claim.Type == "lastname" ).Value;
+            cTWhoami.email = token.Claims.First(claim=>claim.Type == "email" ).Value;
             return this.BuildJWTToken(cTWhoami,fc);
         }
     }

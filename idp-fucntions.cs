@@ -80,7 +80,7 @@ namespace EaglesJungscharen.CT.IDP.Functions
             log.LogInformation("Refresh requestes");
             FunctionContext<dynamic> fc = new FunctionContext<dynamic>(log,req,cloudTable);
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            String accessToken = req.Headers.First(header=>header.Key== "Authorization").Value;
+            string accessToken = req.Headers.FirstOrDefault(header=>header.Key== "Authorization").Value;
             if (accessToken == null || !accessToken.StartsWith("Bearer")) {
                 return new UnauthorizedResult();
             }
@@ -93,6 +93,7 @@ namespace EaglesJungscharen.CT.IDP.Functions
             }
             string refreshToken = data.refreshToken;
             string accessTokenShort = accessToken.Substring(7);
+            log.LogInformation(accessTokenShort);
             if (jwtService.CheckRefreshToken(fc,refreshToken,accessTokenShort)) {
                 Tokens tokens = await jwtService.CreateNewTokenFromAccessToken(fc,accessTokenShort);
                 return new OkObjectResult(tokens);
