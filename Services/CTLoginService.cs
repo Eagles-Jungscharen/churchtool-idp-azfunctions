@@ -60,5 +60,16 @@ namespace EaglesJungscharen.CT.IDP.Services {
             string result = await response.Content.ReadAsStringAsync();
             return JsonConvert.DeserializeObject<CTResponse<CTWhoami>>(result).data;            
         }
+
+        public async Task<List<CTGroupContainer>> GetGroups(string setCookieHeader, int id, HttpClient httpClient) {
+            HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, this.cturl +"/api/persons/"+id+"/groups");
+            CookieContainer container = new CookieContainer();
+            Uri ctUri = new Uri(this.cturl);
+            container.SetCookies(ctUri, setCookieHeader );
+            request.Headers.Add("Cookie",container.GetCookieHeader(ctUri));
+            HttpResponseMessage response = await httpClient.SendAsync(request);
+            string result = await response.Content.ReadAsStringAsync();
+            return JsonConvert.DeserializeObject<CTResponse<List<CTGroupContainer>>>(result).data;           
+        }
     }
 }

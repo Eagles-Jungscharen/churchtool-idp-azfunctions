@@ -51,10 +51,10 @@ namespace EaglesJungscharen.CT.IDP.Services {
             TableOperation insertOrMerge = TableOperation.InsertOrReplace(pk);
             await fc.Table.ExecuteAsync(insertOrMerge);
         }
-        public async Task<Tokens> BuildJWTToken(CTWhoami whoami, FunctionContext<dynamic> fc) {
+        public async Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes, FunctionContext<dynamic> fc) {
             await checkKeys(fc);
-            string idToken = createIDToken(whoami, fc);
-            string accessToken = createAccessToken(whoami, fc);
+            string idToken = createIDToken(whoami, scopes, fc);
+            string accessToken = createAccessToken(whoami, scopes, fc);
             string refreshToken = createRefreshToken(fc, accessToken);
             return Tokens.BuildTokens(idToken, accessToken, refreshToken, JWTService.Expires_In_AccessToken);
         }
@@ -91,7 +91,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             }
         }
 
-        private string createIDToken(CTWhoami whoami, FunctionContext<dynamic> fc) {
+        private string createIDToken(CTWhoami whoami, List<string> scopes, FunctionContext<dynamic> fc) {
             RsaSecurityKey rsaKey = new RsaSecurityKey(this.privateRSAKey);
             rsaKey.KeyId = this.keyId;
             var signingCredentials = new SigningCredentials(rsaKey, SecurityAlgorithms.RsaSha256)
@@ -100,17 +100,11 @@ namespace EaglesJungscharen.CT.IDP.Services {
             };
             var now = DateTime.Now;
             var unixTimeSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
-
+            var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes);
             var jwt = new JwtSecurityToken(
                 audience: "ct.auth",
                 issuer: "CT_IDP",
-                claims: new Claim[] {
-                    new Claim(JwtRegisteredClaimNames.Iat, unixTimeSeconds.ToString(), ClaimValueTypes.Integer64),
-                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                    new Claim("firstname", whoami.firstName),
-                    new Claim("lastname", whoami.lastName),
-                    new Claim("email", whoami.email)
-                },
+                claims: claims,
                 notBefore: now,
                 expires: now.AddSeconds(JWTService.Expires_In_AccessToken),
                 signingCredentials: signingCredentials
@@ -118,7 +112,20 @@ namespace EaglesJungscharen.CT.IDP.Services {
             return new JwtSecurityTokenHandler().WriteToken(jwt);
         }
 
-        private string createAccessToken(CTWhoami whoami, FunctionContext<dynamic> fc) {
+        private Claim[] BuildClaims(CTWhoami whoami, string timeStamp, List<string> scopes) {
+            List<Claim> claims = new List<Claim>();
+            claims.Add(new Claim(JwtRegisteredClaimNames.Iat, timeStamp, ClaimValueTypes.Integer64));
+            claims.Add(new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()));
+            claims.Add(new Claim("firstname", whoami.firstName));
+            claims.Add(new Claim("lastname", whoami.lastName));
+            claims.Add(new Claim("email", whoami.email));
+            if (scopes.Count() > 0) {
+                claims.AddRange(scopes.Select(val=>new Claim("scopes", val)));
+            }
+            return claims.ToArray();
+        }
+
+        private string createAccessToken(CTWhoami whoami, List<string> scopes, FunctionContext<dynamic> fc) {
             RsaSecurityKey rsaKey = new RsaSecurityKey(this.privateRSAKey);
             rsaKey.KeyId = this.keyId;
             var signingCredentials = new SigningCredentials(rsaKey, SecurityAlgorithms.RsaSha256)
@@ -127,17 +134,11 @@ namespace EaglesJungscharen.CT.IDP.Services {
             };
             var now = DateTime.Now;
             var unixTimeSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
-
+            var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes);
             var jwt = new JwtSecurityToken(
                 audience: "ct.test.",
                 issuer: "CT_IDP",
-                claims: new Claim[] {
-                    new Claim(JwtRegisteredClaimNames.Iat, unixTimeSeconds.ToString(), ClaimValueTypes.Integer64),
-                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                    new Claim("firstname", whoami.firstName),
-                    new Claim("lastname", whoami.lastName),
-                    new Claim("email", whoami.email)
-                },
+                claims: claims,
                 notBefore: now,
                 expires: now.AddSeconds(JWTService.Expires_In_AccessToken),
                 signingCredentials: signingCredentials
@@ -185,7 +186,8 @@ namespace EaglesJungscharen.CT.IDP.Services {
             cTWhoami.firstName = token.Claims.First(claim=>claim.Type == "firstname" ).Value;
             cTWhoami.lastName = token.Claims.First(claim=>claim.Type == "lastname" ).Value;
             cTWhoami.email = token.Claims.First(claim=>claim.Type == "email" ).Value;
-            return this.BuildJWTToken(cTWhoami,fc);
+            List<string> scopes = token.Claims.Where(claim=>claim.Type=="scopes").Select(fclaim=>fclaim.Value).ToList();
+            return this.BuildJWTToken(cTWhoami,scopes,fc);
         }
     }
 }

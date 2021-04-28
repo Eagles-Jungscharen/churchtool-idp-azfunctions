@@ -47,7 +47,9 @@ namespace EaglesJungscharen.CT.IDP.Functions
             log.LogInformation("Result: "+lr.Error);
             if (!lr.Error) {
                 CTWhoami cTWhoami = await service.GetWhoAmi(lr.SetCookieHeader,httpClient);
-                Tokens tokens = await jwtService.BuildJWTToken(cTWhoami, fc);
+                List<CTGroupContainer> groups = await service.GetGroups(lr.SetCookieHeader, cTWhoami.id, httpClient);
+                List<string> scopes = groups.Select(gc=> "ct_group_"+gc.group.domainIdentifier).ToList();
+                Tokens tokens = await jwtService.BuildJWTToken(cTWhoami, scopes, fc);
                 return new OkObjectResult(tokens);
             }
             return new UnauthorizedResult();
