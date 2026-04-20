@@ -45,7 +45,7 @@ public class RefreshToken
         string accessTokenShort = accessToken.Substring(7);
         _logger.LogInformation("Access token: {AccessToken}", accessTokenShort);
 
-        if (_jwtService.CheckRefreshToken(refreshToken, accessTokenShort))
+        if (await _jwtService.CheckRefreshToken(refreshToken, accessTokenShort))
         {
             Tokens tokens = await _jwtService.CreateNewTokenFromAccessToken(accessTokenShort);
             return new OkObjectResult(tokens);

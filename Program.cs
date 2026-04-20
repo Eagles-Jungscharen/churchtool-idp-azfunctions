@@ -1,5 +1,7 @@
 using Azure.Data.Tables;
+using EaglesJungscharen.CT.IDP.Models;
 using EaglesJungscharen.CT.IDP.Services;
+using GuedesPlace.AzureTools.Tables;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -10,6 +12,11 @@ builder.ConfigureFunctionsWebApplication();
 
 // Register TableServiceClient
 var storageConnectionString = Environment.GetEnvironmentVariable("AzureWebJobsStorage");
+var tableClientService = new ExtendedAzureTableClientService(storageConnectionString!);
+var publicKeyTableClient = tableClientService.CreateAndRegisterTableClient<PublicKey>("PublicKeyTable");
+var privateKeyTableClient = tableClientService.CreateAndRegisterTableClient<PrivateKey>("PrivateKeyTable");
+var refreshTokenTableClient = tableClientService.CreateAndRegisterTableClient<RefreshToken>("RefreshTokenTable");
+
 builder.Services.AddSingleton(new TableServiceClient(storageConnectionString));
 builder.Services.AddSingleton(sp =>
 {

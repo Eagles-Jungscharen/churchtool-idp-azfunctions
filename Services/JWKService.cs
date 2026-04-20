@@ -1,36 +1,36 @@
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Cryptography;
 using EaglesJungscharen.CT.IDP.Models;
-using System.Linq;
-using System.Collections.Generic;
-using System;
-using Azure.Data.Tables;
+using GuedesPlace.AzureTools.Tables;
 
-namespace EaglesJungscharen.CT.IDP.Services {
-    
-    public interface IJWKService {
-        IEnumerable<JsonWebKey> GetPublicKeys();
+namespace EaglesJungscharen.CT.IDP.Services;
+
+public interface IJWKService
+{
+    Task<IEnumerable<JsonWebKey>> GetPublicKeys();
+}
+
+public class JWKService(ExtendedAzureTableClientService tableClientService) : IJWKService
+{
+    private readonly TypedAzureTableClient<PublicKey> _publicKeyTableClient =
+        tableClientService.GetTypedTableClient<PublicKey>();
+
+
+    public async Task<IEnumerable<JsonWebKey>> GetPublicKeys()
+    {
+        var allPK = await _publicKeyTableClient.GetAllAsync("ACCESS_PUBLIC");
+        return allPK.Select(pke => GetJWKFromPK(pke.Entity));
     }
 
-    public class JWKService : IJWKService {
-        private readonly TableClient _tableClient;
+    public static JsonWebKey GetJWKFromPK(PublicKey pke)
+    {
+        using RSA rsa = RSA.Create();
+        rsa.ImportRSAPublicKey(Convert.FromBase64String(pke.PublicKeyValue!), out _);
+        RsaSecurityKey rsaSecurity = new(rsa)
+        {
+            KeyId = pke.KeyId
+        };
 
-        public JWKService(TableClient tableClient) {
-            _tableClient = tableClient;
-        }
-
-        public IEnumerable<JsonWebKey> GetPublicKeys() {
-            var allPK = _tableClient.Query<PublicKeyTE>(filter: $"PartitionKey eq 'ACCESS_PK'");
-            return allPK.Select(pke => GetJWKFromPK(pke));
-        }
-
-        public JsonWebKey GetJWKFromPK(PublicKeyTE pke) {
-            RSA rsa = RSA.Create();
-            rsa.ImportRSAPublicKey(Convert.FromBase64String(pke.PublicKey!), out _);
-            RsaSecurityKey rsaSecurity = new RsaSecurityKey(rsa);
-            rsaSecurity.KeyId = pke.RowKey;
-
-            return JsonWebKeyConverter.ConvertFromRSASecurityKey(rsaSecurity);
-        }
+        return JsonWebKeyConverter.ConvertFromRSASecurityKey(rsaSecurity);
     }
 }

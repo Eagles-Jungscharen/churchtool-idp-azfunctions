@@ -1,38 +1,38 @@
 using Azure.Data.Tables;
 using System.Security.Cryptography;
-using System;
-using System.Threading.Tasks;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.Extensions.Logging;
-using System.Linq;
-using System.Collections.Generic;
 
 using EaglesJungscharen.CT.IDP.Models;
+using GuedesPlace.AzureTools.Tables;
 
 namespace EaglesJungscharen.CT.IDP.Services {
     
     public interface IJWTService {
         Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes);
-        bool CheckRefreshToken(string refreshToken, string accessToken);
+        Task<bool> CheckRefreshToken(string refreshToken, string accessToken);
         Task<Tokens> CreateNewTokenFromAccessToken(string accessToken);
     }
 
-    public class JWTService : IJWTService {
+    public class JWTService(ExtendedAzureTableClientService tableClientService, TableClient tableClient, ILogger<JWTService> logger) : IJWTService {
 
-        public static int Expires_In_AccessToken = 3600;
-        public static int Expires_In_PrivateKey = 43200;
+        public static readonly int Expires_In_AccessToken = 3600;
+        public static readonly int Expires_In_PrivateKey = 43200;
+        private readonly TypedAzureTableClient<PublicKey> _publicKeyTableClient =
+        tableClientService.GetTypedTableClient<PublicKey>();
+        private readonly TypedAzureTableClient<PrivateKey> _privateKeyTableClient =
+        tableClientService.GetTypedTableClient<PrivateKey>();
+
+        private readonly TypedAzureTableClient<RefreshToken> _refreshTokenTableClient =
+        tableClientService.GetTypedTableClient<RefreshToken>();
         
-        private readonly TableClient _tableClient;
-        private readonly ILogger<JWTService> _logger;
+        private readonly TableClient _tableClient = tableClient;
+        private readonly ILogger<JWTService> _logger = logger;
         private RSA? _privateRSAKey;
         private string? _keyId;
 
-        public JWTService(TableClient tableClient, ILogger<JWTService> logger) {
-            _tableClient = tableClient;
-            _logger = logger;
-        }
 
         public async Task CreateNewKey() {
            RSA rsa = RSA.Create();
@@ -45,22 +45,24 @@ namespace EaglesJungscharen.CT.IDP.Services {
         }
 
         private async Task StorePublicKey(byte[] pkAsBytes, DateTime expiresIn) {
-            PublicKeyTE pk = new PublicKeyTE();
-            pk.PartitionKey = "ACCESS_PK";
-            pk.RowKey = _keyId!;
-            pk.Expires = expiresIn;
-            pk.AssignPublicKey(pkAsBytes);
-            await _tableClient.UpsertEntityAsync(pk);
+            PublicKey pk = new()
+            {
+                KeyId = _keyId!,
+                Expires = expiresIn,
+                PublicKeyValue = Convert.ToBase64String(pkAsBytes)
+            };
+            await _publicKeyTableClient.InsertOrReplaceAsync("ACCESS_PUBLIC", pk.KeyId, pk);
         }
 
         private async Task StorePrivateKey(byte[] privateKeyAsBytes, DateTime expiresIn) {
-            PrivateKeyTE pk = new PrivateKeyTE();
-            pk.PartitionKey = "ACCESS_PRIVATE";
-            pk.RowKey = "LATEST";
-            pk.PublicKeyId = _keyId;
-            pk.Expires = expiresIn;
-            pk.AssignePrivateKey(privateKeyAsBytes);
-            await _tableClient.UpsertEntityAsync(pk, TableUpdateMode.Replace);
+            PrivateKey pk = new()
+            {
+                KeyId = _keyId!,
+                Expires = expiresIn,
+                PrivateKeyValue = Convert.ToBase64String(privateKeyAsBytes),
+                PublicKeyId = _keyId!
+            };
+            await _privateKeyTableClient.InsertOrReplaceAsync("ACCESS_PRIVATE", "LATEST", pk);
         }
 
         public async Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes) {
@@ -82,14 +84,19 @@ namespace EaglesJungscharen.CT.IDP.Services {
         private async Task<bool> LoadKeys() {
             _logger.LogInformation("Loading Keys");
             try {
-                var response = await _tableClient.GetEntityAsync<PrivateKeyTE>("ACCESS_PRIVATE", "LATEST");
-                PrivateKeyTE pke = response.Value;
+                var response = await _privateKeyTableClient.GetByIdAsync("ACCESS_PRIVATE", "LATEST");
+                var pke = response?.Entity;
+
+                if(pke == null) {
+                    _logger.LogInformation("No private key found.");
+                    return false;
+                }   
                 
                 _logger.LogInformation("Private Key found with PKID: {PublicKeyId}", pke.PublicKeyId);
                 if (DateTime.Now < pke.Expires) {
                     _keyId = pke.PublicKeyId;
                     RSA rsa = RSA.Create();
-                    rsa.ImportRSAPrivateKey(Convert.FromBase64String(pke.PrivateKey!), out _);
+                    rsa.ImportRSAPrivateKey(Convert.FromBase64String(pke.PrivateKeyValue), out _);
                     _privateRSAKey = rsa;
                     return true;
                 } else {
@@ -103,8 +110,10 @@ namespace EaglesJungscharen.CT.IDP.Services {
         }
 
         private string CreateIDToken(CTWhoami whoami, List<string> scopes) {
-            RsaSecurityKey rsaKey = new RsaSecurityKey(_privateRSAKey);
-            rsaKey.KeyId = _keyId;
+            RsaSecurityKey rsaKey = new(_privateRSAKey)
+            {
+                KeyId = _keyId
+            };
             var signingCredentials = new SigningCredentials(rsaKey, SecurityAlgorithms.RsaSha256)
             {
                 CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false }
@@ -137,8 +146,10 @@ namespace EaglesJungscharen.CT.IDP.Services {
         }
 
         private string CreateAccessToken(CTWhoami whoami, List<string> scopes) {
-            RsaSecurityKey rsaKey = new RsaSecurityKey(_privateRSAKey);
-            rsaKey.KeyId = _keyId;
+            RsaSecurityKey rsaKey = new(_privateRSAKey)
+            {
+                KeyId = _keyId
+            };
             var signingCredentials = new SigningCredentials(rsaKey, SecurityAlgorithms.RsaSha256)
             {
                 CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false }
@@ -160,22 +171,27 @@ namespace EaglesJungscharen.CT.IDP.Services {
         private async Task<string> CreateRefreshToken(string accessToken) {
             DateTime expiresIn = DateTime.Now.AddSeconds(Expires_In_AccessToken);
             string refreshToken = Guid.NewGuid().ToString();
-            RefreshTokenTE rtTE = new RefreshTokenTE();
-            rtTE.AccessToken = accessToken;
-            rtTE.Expires = expiresIn;
-            rtTE.RowKey = refreshToken;
-            rtTE.PartitionKey = "REFRESH_TOKEN";
-            await _tableClient.UpsertEntityAsync(rtTE);
+            RefreshToken rtTE = new()
+            {
+                AccessToken = accessToken,
+                Expires = expiresIn,
+                RefreshTokenValue = refreshToken
+            };
+            await _refreshTokenTableClient.InsertOrReplaceAsync("REFRESH_TOKEN", refreshToken, rtTE);
             return refreshToken;
         }
 
-        public bool CheckRefreshToken(string refreshToken, string accessToken) {
+        public async Task<bool> CheckRefreshToken(string refreshToken, string accessToken) {
             try {
-                var response = _tableClient.GetEntity<RefreshTokenTE>("REFRESH_TOKEN", refreshToken);
-                RefreshTokenTE token = response.Value;
+                var response = await _refreshTokenTableClient.GetByIdAsync(refreshToken, "REFRESH_TOKEN");
+                RefreshToken token = response?.Entity;
+                if (token == null) {
+                    _logger.LogInformation("Refresh token not found: {RefreshToken}", refreshToken);
+                    return false;
+                }
 
                 if (token.AccessToken?.Equals(accessToken) == true) {
-                    _tableClient.DeleteEntity(token.PartitionKey, token.RowKey, token.ETag);
+                    await _refreshTokenTableClient.DeleteEntityAsync(token.RefreshTokenValue, "REFRESH_TOKEN");
                     return true;
                 }
                 return false;
@@ -188,10 +204,12 @@ namespace EaglesJungscharen.CT.IDP.Services {
         public Task<Tokens> CreateNewTokenFromAccessToken(string accessToken) {
             JwtSecurityTokenHandler jsth = new JwtSecurityTokenHandler();
             JwtSecurityToken token = jsth.ReadJwtToken(accessToken);
-            CTWhoami cTWhoami = new CTWhoami();
-            cTWhoami.firstName = token.Claims.First(claim => claim.Type == "firstname").Value;
-            cTWhoami.lastName = token.Claims.First(claim => claim.Type == "lastname").Value;
-            cTWhoami.email = token.Claims.First(claim => claim.Type == "email").Value;
+            CTWhoami cTWhoami = new()
+            {
+                firstName = token.Claims.First(claim => claim.Type == "firstname").Value,
+                lastName = token.Claims.First(claim => claim.Type == "lastname").Value,
+                email = token.Claims.First(claim => claim.Type == "email").Value
+            };
             List<string> scopes = token.Claims.Where(claim => claim.Type == "scopes").Select(fclaim => fclaim.Value).ToList();
             return BuildJWTToken(cTWhoami, scopes);
         }

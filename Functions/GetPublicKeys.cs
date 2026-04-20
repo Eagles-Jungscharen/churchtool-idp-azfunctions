@@ -12,10 +12,10 @@ public class GetPublicKeys(IJWKService jwkService)
     private readonly IJWKService _jwkService = jwkService;
 
     [Function("well-known")]
-    public IActionResult Run(
+    public async Task<IActionResult> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", "get", Route = "jwks.json")] HttpRequest req)
     {
-        var jwkKeys = _jwkService.GetPublicKeys();
+        var jwkKeys = await _jwkService.GetPublicKeys();
         var response = new PublicKeyResponse()
         {
             Keys = [.. jwkKeys]
