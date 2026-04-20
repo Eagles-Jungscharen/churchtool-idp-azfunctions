@@ -3,11 +3,13 @@ namespace EaglesJungscharen.CT.IDP.Models {
 
     public class Tokens {
         public static Tokens BuildTokens(string idToken, string accessToken, string refreshToken, int expiresIn) {
-            Tokens tokens = new Tokens();
-            tokens.IdToken = idToken;
-            tokens.AccessToken = accessToken;
-            tokens.RefreshToken = refreshToken;
-            tokens.ExpiresIn = expiresIn;
+            var tokens = new Tokens
+            {
+                IdToken = idToken,
+                AccessToken = accessToken,
+                RefreshToken = refreshToken,
+                ExpiresIn = expiresIn
+            };
             return tokens;
         }
         [JsonProperty("id_token")]
