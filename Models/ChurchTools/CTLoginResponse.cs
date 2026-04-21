@@ -1,13 +1,13 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace EaglesJungscharen.CT.IDP.Models.ChurchTools;
 
 public class CTLoginResponse
 {
-    [JsonProperty("status")]
+    [JsonPropertyName("status")]
     public string? Status { get; set; }
-    [JsonProperty("message")]
+    [JsonPropertyName("message")]
     public string? Message { get; set; }
-    [JsonProperty("personId")]
+    [JsonPropertyName("personId")]
     public int PersonId { get; set; }
 }

@@ -1,12 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Http;
-using Newtonsoft.Json;
 using EaglesJungscharen.CT.IDP.Models.ChurchTools;
 using EaglesJungscharen.CT.IDP.Models;
 using EaglesJungscharen.CT.IDP.Services;
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace EaglesJungscharen.CT.IDP.Functions;
 
@@ -21,24 +19,21 @@ public class Authenticate(ICTLoginService loginService, IJWTService jwtService, 
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = null)] HttpRequest req)
     {
         _logger.LogInformation("Login requested");
+        var loginRequest = await req.ReadFromJsonAsync<LoginRequest>();
 
-        string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-        dynamic? data = JsonConvert.DeserializeObject(requestBody);
-        if (data == null)
+        if (loginRequest == null)
         {
-            return new BadRequestObjectResult("No Payload available");
+            return new BadRequestObjectResult("Kein gültiges Login-Objekt übergeben");
         }
 
-        string? username = data.username;
-        string? password = data.password;
+        string? username = loginRequest.Username;
+        string? password = loginRequest.Password;
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
-            return new BadRequestObjectResult("Kein Benutername oder Passwort übergeben");
+            return new BadRequestObjectResult("Kein Benutzername oder Passwort übergeben");
         }
 
         LoginResult lr = await _loginService.DoLogin(username, password);
-        _logger.LogInformation("Result: {Error}", lr.Error);
-
         if (!lr.Error)
         {
             var ctWhoami = await _loginService.GetWhoAmi(lr.SetCookieHeader!);
@@ -55,6 +50,7 @@ public class Authenticate(ICTLoginService loginService, IJWTService jwtService, 
             Tokens tokens = await _jwtService.BuildJWTToken(ctWhoami, scopes);
             return new OkObjectResult(tokens);
         }
+        _logger.LogInformation("Result: {Error}", lr.Error);
         return new UnauthorizedResult();
     }
 }

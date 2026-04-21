@@ -1,18 +1,18 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace EaglesJungscharen.CT.IDP.Models.ChurchTools;
 
 public class CTGroup
 {
-    [JsonProperty("domainIdentifier")]
+    [JsonPropertyName("domainIdentifier")]
     public int DomainIdentifier { get; set; }
-    [JsonProperty("title")]
+    [JsonPropertyName("title")]
     public string? Title { get; set; }
-    [JsonProperty("domainIdentifierString")]
+    [JsonPropertyName("domainIdentifierString")]
     public string? DomainIdentifierString { get; set; }
 }
 public class CTGroupContainer
 {
-    [JsonProperty("group")]
+    [JsonPropertyName("group")]
     public CTGroup? Group { get; set; }
 }

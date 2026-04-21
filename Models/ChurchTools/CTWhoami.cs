@@ -1,15 +1,14 @@
-using Newtonsoft.Json;
-
+using System.Text.Json.Serialization;
 namespace EaglesJungscharen.CT.IDP.Models.ChurchTools;
 
 public class CTWhoami
 {
-    [JsonProperty("id")]
+    [JsonPropertyName("id")]
     public int Id { get; set; }
-    [JsonProperty("firstName")]
+    [JsonPropertyName("firstName")]
     public string? FirstName { get; set; }
-    [JsonProperty("lastName")]
+    [JsonPropertyName("lastName")]
     public string? LastName { get; set; }
-    [JsonProperty("email")]
+    [JsonPropertyName("email")]
     public string? Email { get; set; }
 }

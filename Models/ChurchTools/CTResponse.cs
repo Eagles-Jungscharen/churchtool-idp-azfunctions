@@ -1,9 +1,9 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace EaglesJungscharen.CT.IDP.Models.ChurchTools;
 
 public class CTResponse<T>
 {
-    [JsonProperty("data")]
+    [JsonPropertyName("data")]
     public T? Data { get; set; }
 }

@@ -1,11 +1,10 @@
-using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace EaglesJungscharen.CT.IDP.Models;
 
 public class PublicKeyResponse
 {
-    [JsonProperty("keys")]
+    [JsonPropertyName("keys")]
     public required List<JsonWebKey> Keys { get; set; }
 }

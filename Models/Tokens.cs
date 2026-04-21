@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 namespace EaglesJungscharen.CT.IDP.Models {
 
     public class Tokens {
@@ -12,15 +12,15 @@ namespace EaglesJungscharen.CT.IDP.Models {
             };
             return tokens;
         }
-        [JsonProperty("id_token")]
+        [JsonPropertyName("id_token")]
         public string IdToken { get; set; } = string.Empty;
-        [JsonProperty("access_token")]
+        [JsonPropertyName("access_token")]
         public string AccessToken { get; set; } = string.Empty;
-        [JsonProperty("refresh_token")]
+        [JsonPropertyName("refresh_token")]
         public string RefreshToken { get; set; } = string.Empty;
-        [JsonProperty("expires_in")]
+        [JsonPropertyName("expires_in")]
         public int ExpiresIn { get; set; }
-        [JsonProperty("token_type")]
+        [JsonPropertyName("token_type")]
         public readonly string TokenType = "Bearer";
     }
 }
