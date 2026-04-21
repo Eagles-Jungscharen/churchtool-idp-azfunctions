@@ -1,36 +1,215 @@
 # churchtool-idp-azfunctions
 
-Ein Identity Provider (IDP) für [ChurchTools](https://church.tools/), der als Azure Functions läuft und signierte JWT-Tokens generiert.
+Identity Provider (IDP) fuer ChurchTools auf Basis von Azure Functions (.NET Isolated). Das Projekt authentifiziert Benutzer gegen ChurchTools, erstellt signierte JWTs und stellt einen JWKS-Endpunkt fuer die Token-Pruefung bereit.
 
-## Übersicht
+## Ziel des Projekts
 
-Dieses Projekt fungiert als Brücke zwischen der ChurchTools-Authentifizierung und einem standardisierten OAuth/JWT-basierten Authentifizierungsmodell. Es ermöglicht anderen Anwendungen, ChurchTools-Benutzer zu authentifizieren und deren Berechtigungen über JWT-Tokens zu nutzen.
+Dieser Dienst uebersetzt ChurchTools-Logins in ein JWT-basiertes Authentifizierungsmodell, damit andere Anwendungen ChurchTools-Benutzer konsistent authentifizieren und autorisieren koennen.
 
-## Funktionsweise
+## Architekturueberblick
 
-### Authentifizierung
+Das Projekt besteht aus drei Ebenen:
 
-1. Ein Benutzer sendet seine ChurchTools-Anmeldedaten (Benutzername/Passwort) an den IDP
-2. Der IDP authentifiziert den Benutzer gegen die ChurchTools-API
-3. Bei erfolgreicher Anmeldung werden folgende Tokens erstellt:
-   - **ID Token**: Enthält Benutzerinformationen (Vorname, Nachname, E-Mail)
-   - **Access Token**: Enthält die Berechtigungen basierend auf den ChurchTools-Gruppenmitgliedschaften
-   - **Refresh Token**: Ermöglicht die Erneuerung abgelaufener Tokens
+- Functions als HTTP-Einstiegspunkte
+- Services fuer ChurchTools-Integration, Token-Erzeugung und Key-Verwaltung
+- Models fuer Requests/Responses und Table-Storage-Entitaeten
 
-### Berechtigungen (Scopes)
+Wichtige Komponenten:
 
-Die Gruppenmitgliedschaften des Benutzers in ChurchTools werden automatisch als Scopes in die Tokens übernommen. So können andere Anwendungen feingranulare Zugriffskontrollen basierend auf den ChurchTools-Gruppen implementieren.
+- [Program.cs](Program.cs): DI-Setup, HttpClient-Registrierung, Table-Client-Registrierung
+- [Functions/Authenticate.cs](Functions/Authenticate.cs): Login gegen ChurchTools und Token-Ausgabe
+- [Functions/RefreshToken.cs](Functions/RefreshToken.cs): Token-Erneuerung
+- [Functions/GetPublicKeys.cs](Functions/GetPublicKeys.cs): Bereitstellung von Public Keys als JWKS
+- [Services/CTLoginService.cs](Services/CTLoginService.cs): Calls gegen ChurchTools API
+- [Services/JWTService.cs](Services/JWTService.cs): JWT-Claims, Signatur, Refresh-Validierung, Key-Lifecycle
+- [Services/JWKService.cs](Services/JWKService.cs): Umwandlung gespeicherter Public Keys in JWK
+- [Services/UserTokenService.cs](Services/UserTokenService.cs): Speicherung der ChurchTools-Sessionreferenz
 
-### Token-Verifizierung
+## End-to-End Funktionsweise
 
-Der IDP stellt einen öffentlichen Endpunkt bereit, über den andere Services die öffentlichen Schlüssel abrufen können. Damit können diese die Signatur der JWT-Tokens verifizieren, ohne den IDP bei jeder Anfrage kontaktieren zu müssen.
+### 1. Authentifizierung
 
-### Token-Erneuerung
+1. Client sendet Benutzername/Passwort an den Endpoint `authenticate`.
+2. Der Dienst fuehrt Login gegen ChurchTools aus.
+3. Bei Erfolg werden Benutzerprofil und Gruppen geladen.
+4. Gruppen werden in Scopes umgewandelt.
+5. Es werden `id_token`, `access_token` und `refresh_token` erzeugt.
+6. Das Token-Set wird im OAuth-ueblichen Format zurueckgegeben.
 
-Abgelaufene Access Tokens können mittels des Refresh Tokens erneuert werden, ohne dass sich der Benutzer erneut anmelden muss.
+### 2. Token-Refresh
 
-## Anwendungsfälle
+1. Client sendet `refreshToken` im Body und `Authorization: Bearer <access_token>` im Header.
+2. Der Dienst prueft, ob Refresh-Token und Access-Token zusammenpassen.
+3. Bei Erfolg wird das alte Refresh-Token entfernt und ein neues Token-Set erstellt.
 
-- **Single Sign-On**: Benutzer melden sich einmal mit ihren ChurchTools-Zugangsdaten an und können auf mehrere verbundene Anwendungen zugreifen
-- **API-Absicherung**: Eigene APIs können die JWT-Tokens zur Authentifizierung und Autorisierung nutzen
-- **Gruppenbezogene Berechtigungen**: Zugriff auf Funktionen kann basierend auf ChurchTools-Gruppenmitgliedschaften gesteuert werden
+### 3. Public Key Discovery
+
+1. Ein konsumierender Dienst ruft den JWKS-Endpoint auf.
+2. Die aktuell gespeicherten Public Keys werden als `keys`-Array zurueckgegeben.
+3. Downstream-Systeme koennen damit JWT-Signaturen offline validieren.
+
+## API
+
+Standardmaessig verwendet Azure Functions den Prefix `/api`.
+
+### POST /api/authenticate
+
+Beschreibung: Fuehrt Login gegen ChurchTools durch und gibt ein neues Token-Set zurueck.
+
+Request:
+
+```json
+{
+   "username": "<churchtools-user>",
+   "password": "<churchtools-password>"
+}
+```
+
+Erfolg (200):
+
+```json
+{
+   "id_token": "...",
+   "access_token": "...",
+   "refresh_token": "...",
+   "expires_in": 3600,
+   "token_type": "Bearer"
+}
+```
+
+Typische Fehler:
+
+- `400 Bad Request`: Payload fehlt oder Benutzername/Passwort fehlt
+- `401 Unauthorized`: ChurchTools-Login nicht erfolgreich
+- `502 Bad Gateway`: ChurchTools liefert nach Login keine Benutzerdetails
+
+### POST /api/refresh
+
+Beschreibung: Erneuert Tokens auf Basis eines gueltigen Token-Paars.
+
+Header:
+
+```text
+Authorization: Bearer <access_token>
+```
+
+Request:
+
+```json
+{
+   "refreshToken": "<refresh-token>"
+}
+```
+
+Erfolg (200): gleiches Response-Format wie bei `/api/authenticate`.
+
+Typische Fehler:
+
+- `401 Unauthorized`: Authorization Header fehlt/ungueltig
+- `400 Bad Request`: Payload oder refreshToken fehlt
+- `400 Bad Request`: Kombination aus Refresh- und Access-Token ist ungueltig
+
+### GET /api/jwks.json
+
+Beschreibung: Liefert oeffentliche Schluessel im JWKS-Format.
+
+Erfolg (200):
+
+```json
+{
+   "keys": [
+      {
+         "kid": "...",
+         "kty": "RSA",
+         "e": "...",
+         "n": "..."
+      }
+   ]
+}
+```
+
+## Claims- und Scope-Modell
+
+Die erzeugten JWTs enthalten unter anderem folgende Claims:
+
+- `iat` und `jti`
+- `firstname`, `lastname`, `email`
+- `st_ref` als Referenz auf gespeicherte Login-Daten
+- Mehrfach-Claim `scopes` fuer Gruppenberechtigungen
+
+Scope-Ableitung:
+
+- ChurchTools-Gruppen werden als `ct_group_<domainIdentifier>` in das Token uebernommen.
+
+## Schluessel- und Token-Lifecycle
+
+- Access Token Laufzeit: 3600 Sekunden
+- Private Key Laufzeit: 43200 Sekunden
+- Refresh Tokens sind an den Access Token gebunden und werden nach erfolgreicher Nutzung entfernt
+
+Hinweis: Die Schluessel liegen in Azure Table Storage und werden bei Bedarf neu erzeugt.
+
+## Persistenz in Azure Table Storage
+
+Verwendete Tabellen:
+
+- `PublicKeyTable`
+- `PrivateKeyTable`
+- `RefreshTokenTable`
+- `UserLoginTokensTable`
+
+Gespeichert werden unter anderem:
+
+- Aktueller Private Key und zugehoeriger Public Key
+- Ausgegebene Refresh Tokens inkl. Access-Token-Bindung
+- Externe Sessionreferenzen (`st_ref`) fuer ChurchTools Login-Kontext
+
+## Konfiguration
+
+Erforderliche Umgebungsvariablen:
+
+- `AzureWebJobsStorage`: Verbindung zu Azure Storage
+- `FUNCTIONS_WORKER_RUNTIME=dotnet-isolated`
+- `CT_URL`: Basis-URL der ChurchTools-Instanz
+
+Lokale Entwicklung erfolgt ueber [local.settings.json](local.settings.json).
+
+## Lokaler Betrieb
+
+Voraussetzungen:
+
+- .NET SDK (gem. [churchtool-idp-azfunctions.csproj](churchtool-idp-azfunctions.csproj))
+- Azure Functions Core Tools
+- Zugriff auf eine ChurchTools-Instanz
+- Gueltige Storage-Verbindung
+
+Build:
+
+```bash
+dotnet build
+```
+
+Start:
+
+```bash
+func start
+```
+
+## Logging und Betrieb
+
+- Application-Insights-Sampling ist in [host.json](host.json) aktiviert.
+- Wichtige Ablaufpunkte (Login, Refresh, Key-Laden) werden geloggt.
+- Der Dienst arbeitet upstream-abhaengig von ChurchTools und Azure Storage.
+
+## Sicherheitshinweise
+
+- Der Dienst ist fuer HTTPS-Betrieb vorgesehen.
+- Zugangsdaten werden nicht persistiert.
+- Refresh Tokens sind nicht dauerhaft, sondern an bestehende Token-Kombinationen gebunden.
+- Fuer Produktion sollte CORS in [local.settings.json](local.settings.json) nicht offen (`*`) betrieben werden.
+
+## Bekannte Grenzen
+
+- Es wird genau eine ChurchTools-Instanz ueber `CT_URL` adressiert.
+- Fallback-Logik bei ChurchTools-/Storage-Ausfall ist nicht enthalten.
+- Refresh-Tokens sind nicht fuer langfristige Offline-Sessions ausgelegt.
