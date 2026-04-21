@@ -1,8 +1,14 @@
+using Newtonsoft.Json;
+
 namespace EaglesJungscharen.CT.IDP.Models {
     public class CTWhoami {
-        public int id { get; set; }
-        public string? firstName { get; set; }
-        public string? lastName { get; set; }
-        public string? email { get; set; }
+        [JsonProperty("id")]
+        public int Id { get; set; }
+        [JsonProperty("firstName")]
+        public string? FirstName { get; set; }
+        [JsonProperty("lastName")]
+        public string? LastName { get; set; }
+        [JsonProperty("email")]
+        public string? Email { get; set; }
     }
 }

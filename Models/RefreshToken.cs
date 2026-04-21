@@ -1,5 +1,3 @@
-using Microsoft.Identity.Client;
-
 namespace EaglesJungscharen.CT.IDP.Models;
 
 public class RefreshToken

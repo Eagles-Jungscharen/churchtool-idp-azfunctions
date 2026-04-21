@@ -1,7 +1,12 @@
+using Newtonsoft.Json;
+
 namespace EaglesJungscharen.CT.IDP.Models {
     public class CTLoginResponse {
-        public string? status { get; set; }
-        public string? message { get; set; }
-        public int personId { get; set; }
+        [JsonProperty("status")]
+        public string? Status { get; set; }
+        [JsonProperty("message")]
+        public string? Message { get; set; }
+        [JsonProperty("personId")]
+        public int PersonId { get; set; }
     }
 } 

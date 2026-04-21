@@ -33,7 +33,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             HttpResponseMessage response = await _httpClient.PostAsync(_cturl + "/api/login", content);
             if (response.IsSuccessStatusCode) {
                 string result = await response.Content.ReadAsStringAsync();
-                CTLoginResponse? cTLoginResponse = JsonConvert.DeserializeObject<CTResponse<CTLoginResponse>>(result)?.data;
+                CTLoginResponse? cTLoginResponse = JsonConvert.DeserializeObject<CTResponse<CTLoginResponse>>(result)?.Data;
                 string cookieHeaders = "";
                 IEnumerable<string>? cookHeaderValues;
                 if (response.Headers.TryGetValues("Set-Cookie", out cookHeaderValues)) {
@@ -67,7 +67,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             request.Headers.Add("Cookie", container.GetCookieHeader(ctUri));
             HttpResponseMessage response = await _httpClient.SendAsync(request);
             string result = await response.Content.ReadAsStringAsync();
-            return JsonConvert.DeserializeObject<CTResponse<CTWhoami>>(result)?.data ?? new CTWhoami();
+            return JsonConvert.DeserializeObject<CTResponse<CTWhoami>>(result)?.Data ?? new CTWhoami();
         }
 
         public async Task<List<CTGroupContainer>> GetGroups(string setCookieHeader, int id) {
@@ -78,7 +78,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             request.Headers.Add("Cookie", container.GetCookieHeader(ctUri));
             HttpResponseMessage response = await _httpClient.SendAsync(request);
             string result = await response.Content.ReadAsStringAsync();
-            return JsonConvert.DeserializeObject<CTResponse<List<CTGroupContainer>>>(result)?.data ?? new List<CTGroupContainer>();
+            return JsonConvert.DeserializeObject<CTResponse<List<CTGroupContainer>>>(result)?.Data ?? new List<CTGroupContainer>();
         }
     }
 }

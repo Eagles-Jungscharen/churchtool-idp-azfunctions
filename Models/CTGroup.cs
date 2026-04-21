@@ -1,10 +1,16 @@
+using Newtonsoft.Json;
+
 namespace EaglesJungscharen.CT.IDP.Models {
     public class CTGroup {
-        public int domainIdentifier { get; set; }
-        public string? title { get; set; }
-        public string? domainIdentifierString { get; set; }
+        [JsonProperty("domainIdentifier")]
+        public int DomainIdentifier { get; set; }
+        [JsonProperty("title")]
+        public string? Title { get; set; }
+        [JsonProperty("domainIdentifierString")]
+        public string? DomainIdentifierString { get; set; }
     }
     public class CTGroupContainer {
-        public CTGroup? group { get; set; }
+        [JsonProperty("group")]
+        public CTGroup? Group { get; set; }
     }
 }

@@ -40,8 +40,8 @@ public class Authenticate(ICTLoginService loginService, IJWTService jwtService, 
         if (!lr.Error)
         {
             CTWhoami cTWhoami = await _loginService.GetWhoAmi(lr.SetCookieHeader!);
-            List<CTGroupContainer> groups = await _loginService.GetGroups(lr.SetCookieHeader!, cTWhoami.id);
-            List<string> scopes = groups.Select(gc => "ct_group_" + gc.group?.domainIdentifier).ToList();
+            List<CTGroupContainer> groups = await _loginService.GetGroups(lr.SetCookieHeader!, cTWhoami.Id);
+            List<string> scopes = groups.Select(gc => "ct_group_" + gc.Group?.DomainIdentifier).ToList();
             Tokens tokens = await _jwtService.BuildJWTToken(cTWhoami, scopes);
             return new OkObjectResult(tokens);
         }

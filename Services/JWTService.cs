@@ -130,13 +130,13 @@ namespace EaglesJungscharen.CT.IDP.Services {
             return new JwtSecurityTokenHandler().WriteToken(jwt);
         }
 
-        private Claim[] BuildClaims(CTWhoami whoami, string timeStamp, List<string> scopes) {
+        private static Claim[] BuildClaims(CTWhoami whoami, string timeStamp, List<string> scopes) {
             List<Claim> claims = new List<Claim>();
             claims.Add(new Claim(JwtRegisteredClaimNames.Iat, timeStamp, ClaimValueTypes.Integer64));
             claims.Add(new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()));
-            claims.Add(new Claim("firstname", whoami.firstName ?? ""));
-            claims.Add(new Claim("lastname", whoami.lastName ?? ""));
-            claims.Add(new Claim("email", whoami.email ?? ""));
+            claims.Add(new Claim("firstname", whoami.FirstName ?? ""));
+            claims.Add(new Claim("lastname", whoami.LastName ?? ""));
+            claims.Add(new Claim("email", whoami.Email ?? ""));
             if (scopes.Count() > 0) {
                 claims.AddRange(scopes.Select(val => new Claim("scopes", val)));
             }
@@ -182,13 +182,13 @@ namespace EaglesJungscharen.CT.IDP.Services {
         public async Task<bool> CheckRefreshToken(string refreshToken, string accessToken) {
             try {
                 var response = await _refreshTokenTableClient.GetByIdAsync(refreshToken, "REFRESH_TOKEN");
-                RefreshToken token = response?.Entity;
+                RefreshToken? token = response?.Entity;
                 if (token == null) {
                     _logger.LogInformation("Refresh token not found: {RefreshToken}", refreshToken);
                     return false;
                 }
 
-                if (token.AccessToken?.Equals(accessToken) == true) {
+                if (token.AccessToken == accessToken) {
                     await _refreshTokenTableClient.DeleteEntityAsync(token.RefreshTokenValue, "REFRESH_TOKEN");
                     return true;
                 }
@@ -200,13 +200,13 @@ namespace EaglesJungscharen.CT.IDP.Services {
         }
 
         public Task<Tokens> CreateNewTokenFromAccessToken(string accessToken) {
-            JwtSecurityTokenHandler jsth = new JwtSecurityTokenHandler();
+            JwtSecurityTokenHandler jsth = new();
             JwtSecurityToken token = jsth.ReadJwtToken(accessToken);
             CTWhoami cTWhoami = new()
             {
-                firstName = token.Claims.First(claim => claim.Type == "firstname").Value,
-                lastName = token.Claims.First(claim => claim.Type == "lastname").Value,
-                email = token.Claims.First(claim => claim.Type == "email").Value
+                FirstName = token.Claims.First(claim => claim.Type == "firstname").Value,
+                LastName = token.Claims.First(claim => claim.Type == "lastname").Value,
+                Email = token.Claims.First(claim => claim.Type == "email").Value
             };
             List<string> scopes = token.Claims.Where(claim => claim.Type == "scopes").Select(fclaim => fclaim.Value).ToList();
             return BuildJWTToken(cTWhoami, scopes);
