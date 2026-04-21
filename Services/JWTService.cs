@@ -12,7 +12,7 @@ using GuedesPlace.AzureTools.Tables;
 namespace EaglesJungscharen.CT.IDP.Services {
     
     public interface IJWTService {
-        Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes);
+        Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes, string extRef);
         Task<bool> CheckRefreshToken(string refreshToken, string accessToken);
         Task<Tokens> CreateNewTokenFromAccessToken(string accessToken);
     }
@@ -65,10 +65,10 @@ namespace EaglesJungscharen.CT.IDP.Services {
             await _privateKeyTableClient.InsertOrReplaceAsync("ACCESS_PRIVATE", "LATEST", pk);
         }
 
-        public async Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes) {
+        public async Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes, string extRef) {
             await CheckKeys();
-            string idToken = CreateIDToken(whoami, scopes);
-            string accessToken = CreateAccessToken(whoami, scopes);
+            string idToken = CreateIDToken(whoami, scopes, extRef);
+            string accessToken = CreateAccessToken(whoami, scopes, extRef);
             string refreshToken = await CreateRefreshToken(accessToken);
             return Tokens.BuildTokens(idToken, accessToken, refreshToken, Expires_In_AccessToken);
         }
@@ -109,7 +109,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             }
         }
 
-        private string CreateIDToken(CTWhoami whoami, List<string> scopes) {
+        private string CreateIDToken(CTWhoami whoami, List<string> scopes, string extRef) {
             RsaSecurityKey rsaKey = new(_privateRSAKey)
             {
                 KeyId = _keyId
@@ -120,7 +120,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             };
             var now = DateTime.Now;
             var unixTimeSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
-            var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes);
+            var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes, extRef);
             var jwt = new JwtSecurityToken(
                 audience: "ct.auth",
                 issuer: "CT_IDP",
@@ -132,20 +132,23 @@ namespace EaglesJungscharen.CT.IDP.Services {
             return new JwtSecurityTokenHandler().WriteToken(jwt);
         }
 
-        private static Claim[] BuildClaims(CTWhoami whoami, string timeStamp, List<string> scopes) {
-            List<Claim> claims = new List<Claim>();
-            claims.Add(new Claim(JwtRegisteredClaimNames.Iat, timeStamp, ClaimValueTypes.Integer64));
-            claims.Add(new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()));
-            claims.Add(new Claim("firstname", whoami.FirstName ?? ""));
-            claims.Add(new Claim("lastname", whoami.LastName ?? ""));
-            claims.Add(new Claim("email", whoami.Email ?? ""));
-            if (scopes.Count() > 0) {
+        private static Claim[] BuildClaims(CTWhoami whoami, string timeStamp, List<string> scopes, string extRef) {
+            List<Claim> claims =
+            [
+                new Claim(JwtRegisteredClaimNames.Iat, timeStamp, ClaimValueTypes.Integer64),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                new Claim("firstname", whoami.FirstName ?? ""),
+                new Claim("lastname", whoami.LastName ?? ""),
+                new Claim("email", whoami.Email ?? ""),
+                new Claim("st_ref", extRef),
+            ];
+            if (scopes.Count > 0) {
                 claims.AddRange(scopes.Select(val => new Claim("scopes", val)));
             }
-            return claims.ToArray();
+            return [.. claims];
         }
 
-        private string CreateAccessToken(CTWhoami whoami, List<string> scopes) {
+        private string CreateAccessToken(CTWhoami whoami, List<string> scopes, string extRef) {
             RsaSecurityKey rsaKey = new(_privateRSAKey)
             {
                 KeyId = _keyId
@@ -156,7 +159,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             };
             var now = DateTime.Now;
             var unixTimeSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
-            var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes);
+            var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes, extRef);
             var jwt = new JwtSecurityToken(
                 audience: "ct.test.",
                 issuer: "CT_IDP",
@@ -210,8 +213,9 @@ namespace EaglesJungscharen.CT.IDP.Services {
                 LastName = token.Claims.First(claim => claim.Type == "lastname").Value,
                 Email = token.Claims.First(claim => claim.Type == "email").Value
             };
+            var extRef = token.Claims.First(claim => claim.Type == "st_ref").Value;
             List<string> scopes = token.Claims.Where(claim => claim.Type == "scopes").Select(fclaim => fclaim.Value).ToList();
-            return BuildJWTToken(cTWhoami, scopes);
+            return BuildJWTToken(cTWhoami, scopes, extRef);
         }
     }
 }

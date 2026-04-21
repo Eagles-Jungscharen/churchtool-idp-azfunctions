@@ -11,6 +11,7 @@ public interface ICTLoginService
     Task<LoginResult> DoLogin(string userName, string password);
     Task<CTWhoami?> GetWhoAmi(string setCookieHeader);
     Task<List<CTGroupContainer>> GetGroups(string setCookieHeader, int id);
+    Task<string> GetLoginToken(string setCookieHeader, int id);
 }
 
 public class CTLoginService(HttpClient httpClient, ILogger<CTLoginService> logger) : ICTLoginService
@@ -85,5 +86,17 @@ public class CTLoginService(HttpClient httpClient, ILogger<CTLoginService> logge
         HttpResponseMessage response = await _httpClient.SendAsync(request);
         var result = await response.Content.ReadFromJsonAsync<CTResponse<List<CTGroupContainer>>>();
         return result?.Data ?? [];
+    }
+
+    public async Task<string> GetLoginToken(string setCookieHeader, int id)
+    {
+        HttpRequestMessage request = new(HttpMethod.Get, $"{_cturl}/api/persons/{id}/logintoken");
+        CookieContainer container = new();
+        Uri ctUri = new(_cturl);
+        container.SetCookies(ctUri, setCookieHeader);
+        request.Headers.Add("Cookie", container.GetCookieHeader(ctUri));
+        HttpResponseMessage response = await _httpClient.SendAsync(request);
+        var result = await response.Content.ReadFromJsonAsync<CTResponse<string>>();
+        return result?.Data ?? string.Empty;
     }
 }

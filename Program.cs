@@ -16,6 +16,7 @@ var tableClientService = new ExtendedAzureTableClientService(storageConnectionSt
 var publicKeyTableClient = tableClientService.CreateAndRegisterTableClient<PublicKey>("PublicKeyTable");
 var privateKeyTableClient = tableClientService.CreateAndRegisterTableClient<PrivateKey>("PrivateKeyTable");
 var refreshTokenTableClient = tableClientService.CreateAndRegisterTableClient<RefreshToken>("RefreshTokenTable");
+var userTokenTableClient = tableClientService.CreateAndRegisterTableClient<UserLoginTokens>("UserLoginTokensTable");
 
 builder.Services.AddSingleton(new TableServiceClient(storageConnectionString));
 builder.Services.AddSingleton(sp =>
@@ -38,5 +39,6 @@ builder.Services.AddHttpClient<ICTLoginService, CTLoginService>(client =>
 // Register services
 builder.Services.AddSingleton<IJWTService, JWTService>();
 builder.Services.AddSingleton<IJWKService, JWKService>();
+builder.Services.AddSingleton<UserTokenService>();
 
 builder.Build().Run();
