@@ -6,6 +6,7 @@ using EaglesJungscharen.CT.IDP.Models.ChurchTools;
 using EaglesJungscharen.CT.IDP.Models;
 using EaglesJungscharen.CT.IDP.Services;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace EaglesJungscharen.CT.IDP.Functions;
 
@@ -32,7 +33,7 @@ public class Authenticate(ICTLoginService loginService, IJWTService jwtService, 
         string? password = data.password;
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
-            return new BadRequestObjectResult("Nix username or password");
+            return new BadRequestObjectResult("Kein Benutername oder Passwort übergeben");
         }
 
         LoginResult lr = await _loginService.DoLogin(username, password);
@@ -40,10 +41,18 @@ public class Authenticate(ICTLoginService loginService, IJWTService jwtService, 
 
         if (!lr.Error)
         {
-            CTWhoami cTWhoami = await _loginService.GetWhoAmi(lr.SetCookieHeader!);
-            List<CTGroupContainer> groups = await _loginService.GetGroups(lr.SetCookieHeader!, cTWhoami.Id);
+            var ctWhoami = await _loginService.GetWhoAmi(lr.SetCookieHeader!);
+            if (ctWhoami == null)
+            {
+                _logger.LogWarning("ChurchTools hatte keine Benutzerdetails nach erfolgreichem Login zurückgegeben.");
+                return new ObjectResult("Fehler beim Abrufen der Benutzerdetails von ChurchTools")
+                {
+                    StatusCode = StatusCodes.Status502BadGateway
+                };
+            }
+            List<CTGroupContainer> groups = await _loginService.GetGroups(lr.SetCookieHeader!, ctWhoami.Id);
             List<string> scopes = groups.Select(gc => "ct_group_" + gc.Group?.DomainIdentifier).ToList();
-            Tokens tokens = await _jwtService.BuildJWTToken(cTWhoami, scopes);
+            Tokens tokens = await _jwtService.BuildJWTToken(ctWhoami, scopes);
             return new OkObjectResult(tokens);
         }
         return new UnauthorizedResult();
