@@ -1,6 +1,6 @@
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Cryptography;
-using EaglesJungscharen.CT.IDP.Models;
+using EaglesJungscharen.CT.IDP.Models.Store;
 using GuedesPlace.AzureTools.Tables;
 
 namespace EaglesJungscharen.CT.IDP.Services;

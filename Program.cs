@@ -1,5 +1,5 @@
 using Azure.Data.Tables;
-using EaglesJungscharen.CT.IDP.Models;
+using EaglesJungscharen.CT.IDP.Models.Store;
 using EaglesJungscharen.CT.IDP.Services;
 using GuedesPlace.AzureTools.Tables;
 using Microsoft.Azure.Functions.Worker.Builder;

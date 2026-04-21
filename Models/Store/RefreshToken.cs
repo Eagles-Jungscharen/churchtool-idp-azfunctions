@@ -1,4 +1,4 @@
-namespace EaglesJungscharen.CT.IDP.Models;
+namespace EaglesJungscharen.CT.IDP.Models.Store;
 
 public class RefreshToken
 {

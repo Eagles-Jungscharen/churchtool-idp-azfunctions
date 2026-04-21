@@ -4,6 +4,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.Extensions.Logging;
 
+using EaglesJungscharen.CT.IDP.Models.ChurchTools;
+using EaglesJungscharen.CT.IDP.Models.Store;
 using EaglesJungscharen.CT.IDP.Models;
 using GuedesPlace.AzureTools.Tables;
 
