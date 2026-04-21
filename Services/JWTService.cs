@@ -38,7 +38,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
            RSA rsa = RSA.Create();
            _privateRSAKey = rsa;
            _keyId = Guid.NewGuid().ToString();
-           DateTime expiresIn = DateTime.Now;
+           DateTime expiresIn = DateTime.UtcNow;
            expiresIn = expiresIn.AddSeconds(Expires_In_PrivateKey);
            await StorePublicKey(rsa.ExportRSAPublicKey(), expiresIn);
            await StorePrivateKey(rsa.ExportRSAPrivateKey(), expiresIn);
@@ -51,7 +51,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
                 Expires = expiresIn,
                 PublicKeyValue = Convert.ToBase64String(pkAsBytes)
             };
-            await _publicKeyTableClient.InsertOrReplaceAsync("ACCESS_PUBLIC", pk.KeyId, pk);
+            await _publicKeyTableClient.InsertOrReplaceAsync(pk.KeyId, "ACCESS_PRIVATE", pk);
         }
 
         private async Task StorePrivateKey(byte[] privateKeyAsBytes, DateTime expiresIn) {
@@ -62,7 +62,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
                 PrivateKeyValue = Convert.ToBase64String(privateKeyAsBytes),
                 PublicKeyId = _keyId!
             };
-            await _privateKeyTableClient.InsertOrReplaceAsync("ACCESS_PRIVATE", "LATEST", pk);
+            await _privateKeyTableClient.InsertOrReplaceAsync( "LATEST","ACCESS_PRIVATE", pk);
         }
 
         public async Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes, string extRef) {
@@ -172,7 +172,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
         }
 
         private async Task<string> CreateRefreshToken(string accessToken) {
-            DateTime expiresIn = DateTime.Now.AddSeconds(Expires_In_AccessToken);
+            DateTime expiresIn = DateTime.UtcNow.AddSeconds(Expires_In_AccessToken);
             string refreshToken = Guid.NewGuid().ToString();
             RefreshToken rtTE = new()
             {
@@ -180,7 +180,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
                 Expires = expiresIn,
                 RefreshTokenValue = refreshToken
             };
-            await _refreshTokenTableClient.InsertOrReplaceAsync("REFRESH_TOKEN", refreshToken, rtTE);
+            await _refreshTokenTableClient.InsertOrReplaceAsync(refreshToken, "REFRESH_TOKEN", rtTE);
             return refreshToken;
         }
 
