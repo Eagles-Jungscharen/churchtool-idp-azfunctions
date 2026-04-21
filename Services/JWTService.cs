@@ -51,7 +51,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
                 Expires = expiresIn,
                 PublicKeyValue = Convert.ToBase64String(pkAsBytes)
             };
-            await _publicKeyTableClient.InsertOrReplaceAsync(pk.KeyId, "ACCESS_PRIVATE", pk);
+            await _publicKeyTableClient.InsertOrReplaceAsync(pk.KeyId, "ACCESS_PUBLIC", pk);
         }
 
         private async Task StorePrivateKey(byte[] privateKeyAsBytes, DateTime expiresIn) {
