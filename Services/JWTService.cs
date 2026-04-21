@@ -1,4 +1,3 @@
-using Azure.Data.Tables;
 using System.Security.Cryptography;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -16,7 +15,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
         Task<Tokens> CreateNewTokenFromAccessToken(string accessToken);
     }
 
-    public class JWTService(ExtendedAzureTableClientService tableClientService, TableClient tableClient, ILogger<JWTService> logger) : IJWTService {
+    public class JWTService(ExtendedAzureTableClientService tableClientService, ILogger<JWTService> logger) : IJWTService {
 
         public static readonly int Expires_In_AccessToken = 3600;
         public static readonly int Expires_In_PrivateKey = 43200;
@@ -28,7 +27,6 @@ namespace EaglesJungscharen.CT.IDP.Services {
         private readonly TypedAzureTableClient<RefreshToken> _refreshTokenTableClient =
         tableClientService.GetTypedTableClient<RefreshToken>();
         
-        private readonly TableClient _tableClient = tableClient;
         private readonly ILogger<JWTService> _logger = logger;
         private RSA? _privateRSAKey;
         private string? _keyId;

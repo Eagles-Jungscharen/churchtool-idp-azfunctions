@@ -7,16 +7,10 @@ using Microsoft.Azure.Functions.Worker;
 
 namespace EaglesJungscharen.CT.IDP.Functions;
 
-public class RefreshToken
+public class RefreshToken(IJWTService jwtService, ILogger<RefreshToken> logger)
 {
-    private readonly IJWTService _jwtService;
-    private readonly ILogger<RefreshToken> _logger;
-
-    public RefreshToken(IJWTService jwtService, ILogger<RefreshToken> logger)
-    {
-        _jwtService = jwtService;
-        _logger = logger;
-    }
+    private readonly IJWTService _jwtService = jwtService;
+    private readonly ILogger<RefreshToken> _logger = logger;
 
     [Function("refresh")]
     public async Task<IActionResult> Run(
