@@ -18,14 +18,7 @@ var privateKeyTableClient = tableClientService.CreateAndRegisterTableClient<Priv
 var refreshTokenTableClient = tableClientService.CreateAndRegisterTableClient<RefreshToken>("RefreshTokenTable");
 var userTokenTableClient = tableClientService.CreateAndRegisterTableClient<UserLoginTokens>("UserLoginTokensTable");
 
-builder.Services.AddSingleton(new TableServiceClient(storageConnectionString));
-builder.Services.AddSingleton(sp =>
-{
-    var tableServiceClient = sp.GetRequiredService<TableServiceClient>();
-    var tableClient = tableServiceClient.GetTableClient("PublicKeys");
-    tableClient.CreateIfNotExists();
-    return tableClient;
-});
+builder.Services.AddSingleton(tableClientService);
 
 // Register HttpClient with IHttpClientFactory
 builder.Services.AddHttpClient<ICTLoginService, CTLoginService>(client =>
