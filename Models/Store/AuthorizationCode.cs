@@ -18,6 +18,9 @@ public class AuthorizationCode
     public string? CodeChallenge { get; set; }
 
     public string? CodeChallengeMethod { get; set; }
+
+    public string? CallbackUrl { get; set; }
+
     public string? StRef { get; set; }
 
     public DateTime CreatedAt { get; set; }

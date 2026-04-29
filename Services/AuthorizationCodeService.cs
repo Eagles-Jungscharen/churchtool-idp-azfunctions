@@ -7,6 +7,8 @@ namespace EaglesJungscharen.CT.IDP.Services;
 public interface IAuthorizationCodeService
 {
     Task<AuthorizationCode> StoreAuthorizationCodeAsync(CTWhoami whoami, List<string> scopes, string stRef, AuthorizationRequest authorizationRequest);
+    Task<AuthorizationCode?> GetAuthorizationCodeByIdAsync(string id);
+    Task DeleteAuthorizationCodeAsync(string id);
 }
 
 public class AuthorizationCodeService(ExtendedAzureTableClientService tableClientService) : IAuthorizationCodeService
@@ -26,11 +28,23 @@ public class AuthorizationCodeService(ExtendedAzureTableClientService tableClien
             Scopes = scopes,
             CodeChallenge = authorizationRequest.CodeChallenge,
             CodeChallengeMethod = authorizationRequest.CodeChallengeMethod,
+            CallbackUrl = authorizationRequest.CallbackUrl,
             StRef = stRef,
             CreatedAt = DateTime.UtcNow
         };
 
         await _tableClient.InsertOrReplaceAsync(authorizationCode.Id, "AUTH_CODE", authorizationCode);
         return authorizationCode;
+    }
+
+    public async Task<AuthorizationCode?> GetAuthorizationCodeByIdAsync(string id)
+    {
+        var result = await _tableClient.GetByIdAsync(id, "AUTH_CODE");
+        return result?.Entity;
+    }
+
+    public async Task DeleteAuthorizationCodeAsync(string id)
+    {
+        await _tableClient.DeleteEntityAsync(id, "AUTH_CODE");
     }
 }

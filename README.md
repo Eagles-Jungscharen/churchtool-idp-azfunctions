@@ -18,6 +18,7 @@ Wichtige Komponenten:
 
 - [Program.cs](Program.cs): DI-Setup, HttpClient-Registrierung, Table-Client-Registrierung
 - [Functions/Authenticate.cs](Functions/Authenticate.cs): Login gegen ChurchTools und Token-Ausgabe
+- [Functions/Token.cs](Functions/Token.cs): OIDC Token-Exchange fuer Authorization-Code-Grant
 - [Functions/RefreshToken.cs](Functions/RefreshToken.cs): Token-Erneuerung
 - [Functions/GetPublicKeys.cs](Functions/GetPublicKeys.cs): Bereitstellung von Public Keys als JWKS
 - [Services/CTLoginService.cs](Services/CTLoginService.cs): Calls gegen ChurchTools API
@@ -41,6 +42,13 @@ Wichtige Komponenten:
 1. Client sendet `refreshToken` im Body und `Authorization: Bearer <access_token>` im Header.
 2. Der Dienst prueft, ob Refresh-Token und Access-Token zusammenpassen.
 3. Bei Erfolg wird das alte Refresh-Token entfernt und ein neues Token-Set erstellt.
+
+### 2.5. OIDC Token-Exchange
+
+1. Client sendet `application/x-www-form-urlencoded` an den Endpoint `oidc/token`.
+2. Der Dienst validiert `grant_type`, `code`, `code_verifier`, `client_id` und `redirect_uri`.
+3. Der Authorization Code wird auf Gueltigkeit, Ablaufzeit und PKCE (`S256`) geprueft.
+4. Bei Erfolg wird der Code einmalig verbraucht und ein neues Token-Set zurueckgegeben.
 
 ### 3. Public Key Discovery
 
@@ -108,6 +116,31 @@ Typische Fehler:
 - `401 Unauthorized`: Authorization Header fehlt/ungueltig
 - `400 Bad Request`: Payload oder refreshToken fehlt
 - `400 Bad Request`: Kombination aus Refresh- und Access-Token ist ungueltig
+
+### POST /api/oidc/token
+
+Beschreibung: Tauscht einen Authorization Code gegen ein Token-Set im OAuth2-Format aus.
+
+Header:
+
+```text
+Content-Type: application/x-www-form-urlencoded
+```
+
+Request:
+
+```text
+grant_type=authorization_code&code=<authorization-code>&code_verifier=<pkce-verifier>&client_id=<client-id>&redirect_uri=<redirect-uri>
+```
+
+Erfolg (200): gleiches Response-Format wie bei `/api/authenticate`.
+
+Typische Fehler:
+
+- `400 Bad Request`: Pflichtparameter fehlen oder `grant_type` ist ungueltig
+- `400 Bad Request`: `client_id` oder `redirect_uri` ist ungueltig
+- `400 Bad Request`: Authorization Code ist ungueltig/abgelaufen/bereits verbraucht
+- `400 Bad Request`: PKCE-Pruefung (`code_verifier`) fehlgeschlagen
 
 ### GET /api/jwks.json
 
