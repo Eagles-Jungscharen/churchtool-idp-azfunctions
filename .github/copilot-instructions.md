@@ -87,6 +87,15 @@ Use explicit and predictable HTTP semantics.
 Prefer returning actionable but non-sensitive error messages.
 Do not leak internal secrets, storage keys, or upstream response internals.
 
+## Language Conventions
+
+Apply the following language rules consistently across all code and documentation:
+
+- **Code and variables**: English. This includes class names, method names, property names, variable names, and all identifiers.
+- **Code comments**: German.
+- **Error messages** (e.g. strings passed to `BadRequestObjectResult`, exception messages, validation error texts): German.
+- **Log entries** (e.g. strings passed to `LogInformation`, `LogWarning`, `LogError`): English.
+
 ## Coding Conventions
 
 - Keep nullable reference semantics aligned with current project settings.
