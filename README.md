@@ -18,6 +18,8 @@ Wichtige Komponenten:
 
 - [Program.cs](Program.cs): DI-Setup, HttpClient-Registrierung, Table-Client-Registrierung
 - [Functions/Authenticate.cs](Functions/Authenticate.cs): Login gegen ChurchTools und Token-Ausgabe
+- [Functions/Authorize.cs](Functions/Authorize.cs): OIDC Authorization-Endpunkt, initiiert den Authorization-Code-Flow
+- [Functions/Login.cs](Functions/Login.cs): OIDC Login-Endpunkt, verarbeitet Benutzerdaten im Authorization-Code-Flow
 - [Functions/Token.cs](Functions/Token.cs): OIDC Token-Exchange fuer Authorization-Code-Grant
 - [Functions/RefreshToken.cs](Functions/RefreshToken.cs): Token-Erneuerung
 - [Functions/GetPublicKeys.cs](Functions/GetPublicKeys.cs): Bereitstellung von Public Keys als JWKS
@@ -25,6 +27,9 @@ Wichtige Komponenten:
 - [Services/JWTService.cs](Services/JWTService.cs): JWT-Claims, Signatur, Refresh-Validierung, Key-Lifecycle
 - [Services/JWKService.cs](Services/JWKService.cs): Umwandlung gespeicherter Public Keys in JWK
 - [Services/UserTokenService.cs](Services/UserTokenService.cs): Speicherung der ChurchTools-Sessionreferenz
+- [Services/AuthorizationCodeService.cs](Services/AuthorizationCodeService.cs): Erzeugung und Validierung von Authorization Codes
+- [Services/AuthorizationRequestService.cs](Services/AuthorizationRequestService.cs): Speicherung und Abruf von Authorization Requests
+- [Services/ClientInformationService.cs](Services/ClientInformationService.cs): Verwaltung registrierter OAuth-Clients
 
 ## End-to-End Funktionsweise
 
@@ -43,11 +48,25 @@ Wichtige Komponenten:
 2. Der Dienst prueft, ob Refresh-Token und Access-Token zusammenpassen.
 3. Bei Erfolg wird das alte Refresh-Token entfernt und ein neues Token-Set erstellt.
 
-### 2.5. OIDC Token-Exchange
+### 2.5. OIDC Authorization-Code-Flow
+
+#### Schritt 1: Authorization Request
+
+1. Client sendet `GET /api/oidc/authorize` mit `response_type=code`, `client_id`, `redirect_uri`, `code_challenge`, `code_challenge_method` (S256) und `state`.
+2. Der Dienst validiert die Parameter und prueft `client_id` sowie `redirect_uri` gegen die registrierten Client-Daten.
+3. Ein Authorization Request wird gespeichert und der Benutzer wird an die Login-Seite (`LOGIN_CLIENT_URL`) weitergeleitet.
+
+#### Schritt 2: OIDC Login
+
+1. Die Login-Seite sendet Benutzername, Passwort und die `authentication_request_id` an `POST /api/login`.
+2. Der Dienst validiert den Authorization Request und prueft, ob er noch gueltig ist (max. 5 Minuten).
+3. Bei erfolgreichem ChurchTools-Login werden ein Authorization Code erzeugt und der Browser mit `code` und `state` an die `redirect_uri` weitergeleitet.
+
+#### Schritt 3: Token-Exchange
 
 1. Client sendet `application/x-www-form-urlencoded` an den Endpoint `oidc/token`.
 2. Der Dienst validiert `grant_type`, `code`, `code_verifier`, `client_id` und `redirect_uri`.
-3. Der Authorization Code wird auf Gueltigkeit, Ablaufzeit und PKCE (`S256`) geprueft.
+3. Der Authorization Code wird auf Gueltigkeit, Ablaufzeit (max. 5 Minuten) und PKCE (`S256`) geprueft.
 4. Bei Erfolg wird der Code einmalig verbraucht und ein neues Token-Set zurueckgegeben.
 
 ### 3. Public Key Discovery
@@ -142,6 +161,51 @@ Typische Fehler:
 - `400 Bad Request`: Authorization Code ist ungueltig/abgelaufen/bereits verbraucht
 - `400 Bad Request`: PKCE-Pruefung (`code_verifier`) fehlgeschlagen
 
+### GET /api/oidc/authorize
+
+Beschreibung: Startet den OIDC Authorization-Code-Flow mit PKCE. Validiert Client und Parameter, speichert den Authorization Request und leitet den Benutzer an die Login-Seite weiter.
+
+Query-Parameter:
+
+```text
+response_type=code
+&client_id=<client-id>
+&redirect_uri=<redirect-uri>
+&code_challenge=<pkce-challenge>
+&code_challenge_method=S256
+&state=<state>
+```
+
+Erfolg (302): Weiterleitung an `LOGIN_CLIENT_URL?authorization_request_id=<id>`.
+
+Typische Fehler:
+
+- `400 Bad Request`: Pflichtparameter fehlen oder `response_type` ist ungueltig
+- `400 Bad Request`: `client_id` oder `redirect_uri` ist ungueltig
+
+### POST /api/login
+
+Beschreibung: Nimmt Benutzerdaten und eine `authentication_request_id` entgegen, authentifiziert gegen ChurchTools und leitet bei Erfolg mit einem Authorization Code an die `redirect_uri` weiter.
+
+Request:
+
+```json
+{
+   "username": "<churchtools-user>",
+   "password": "<churchtools-password>",
+   "authentication_request_id": "<authorization-request-id>"
+}
+```
+
+Erfolg (302): Weiterleitung an `<redirect_uri>?code=<authorization-code>&state=<state>`.
+
+Typische Fehler:
+
+- `400 Bad Request`: Payload fehlt oder Pflichtfelder fehlen
+- `400 Bad Request`: `authentication_request_id` ungueltig oder abgelaufen (> 5 Minuten)
+- `401 Unauthorized`: ChurchTools-Login nicht erfolgreich
+- `502 Bad Gateway`: ChurchTools liefert nach Login keine Benutzerdetails
+
 ### GET /api/jwks.json
 
 Beschreibung: Liefert oeffentliche Schluessel im JWKS-Format.
@@ -190,12 +254,18 @@ Verwendete Tabellen:
 - `PrivateKeyTable`
 - `RefreshTokenTable`
 - `UserLoginTokensTable`
+- `AuthorizationRequestTable`
+- `AuthorizationCodeTable`
+- `ClientInformationTable`
 
 Gespeichert werden unter anderem:
 
 - Aktueller Private Key und zugehoeriger Public Key
 - Ausgegebene Refresh Tokens inkl. Access-Token-Bindung
 - Externe Sessionreferenzen (`st_ref`) fuer ChurchTools Login-Kontext
+- Laufende Authorization Requests inkl. PKCE-Challenge und State
+- Einmalig verwendbare Authorization Codes inkl. Benutzerdaten und Ablaufzeit
+- Registrierte OAuth-Clients mit erlaubten `redirect_uri`-Werten
 
 ## Konfiguration
 
@@ -204,6 +274,7 @@ Erforderliche Umgebungsvariablen:
 - `AzureWebJobsStorage`: Verbindung zu Azure Storage
 - `FUNCTIONS_WORKER_RUNTIME=dotnet-isolated`
 - `CT_URL`: Basis-URL der ChurchTools-Instanz
+- `LOGIN_CLIENT_URL`: URL der Login-Frontend-Anwendung fuer den OIDC Authorization-Code-Flow
 
 Lokale Entwicklung erfolgt ueber [local.settings.json](local.settings.json).
 
