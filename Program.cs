@@ -30,6 +30,7 @@ var privateKeyTableClient = tableClientService.CreateAndRegisterTableClient<Priv
 var refreshTokenTableClient = tableClientService.CreateAndRegisterTableClient<RefreshToken>("RefreshTokenTable");
 var userTokenTableClient = tableClientService.CreateAndRegisterTableClient<UserLoginTokens>("UserLoginTokensTable");
 var authorizationRequestTableClient = tableClientService.CreateAndRegisterTableClient<AuthorizationRequest>("AuthorizationRequestTable");
+var authorizationCodeTableClient = tableClientService.CreateAndRegisterTableClient<AuthorizationCode>("AuthorizationCodeTable");
 var clientInformationTableClient = tableClientService.CreateAndRegisterTableClient<ClientInformation>("ClientInformationTable");
 
 builder.Services.AddSingleton(tableClientService);
@@ -48,6 +49,7 @@ builder.Services.AddSingleton<IJWTService, JWTService>();
 builder.Services.AddSingleton<IJWKService, JWKService>();
 builder.Services.AddSingleton<IClientInformationService, ClientInformationService>();
 builder.Services.AddSingleton<IAuthorizationRequestService, AuthorizationRequestService>();
+builder.Services.AddSingleton<IAuthorizationCodeService, AuthorizationCodeService>();
 builder.Services.AddSingleton<UserTokenService>();
 
 builder.Build().Run();

@@ -6,4 +6,5 @@ public class AuthorizationRequest
     public required string CodeChallengeMethod { get; set; }
     public required string CallbackUrl { get; set; }
     public required string State { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
