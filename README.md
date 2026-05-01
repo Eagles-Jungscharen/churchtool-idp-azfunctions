@@ -225,6 +225,125 @@ Erfolg (200):
 }
 ```
 
+### Client-Verwaltung (Admin)
+
+Die folgenden Endpunkte erfordern Function-Key-Authentifizierung (Query-Parameter `?code=<function_key>` oder Header `x-functions-key: <function_key>`). Sie dienen der administrativen Verwaltung von OAuth-Client-Registrierungen.
+
+#### POST /api/clients
+
+Beschreibung: Erstellt eine neue Client-Registrierung.
+
+Header:
+
+```text
+x-functions-key: <function_key>
+```
+
+Request:
+
+```json
+{
+   "clientId": "my-client",
+   "name": "Meine Anwendung",
+   "owner": "admin@example.com",
+   "redirectUris": ["https://example.com/callback"]
+}
+```
+
+Erfolg (201):
+
+```json
+{
+   "clientId": "my-client",
+   "name": "Meine Anwendung",
+   "owner": "admin@example.com",
+   "redirectUris": ["https://example.com/callback"]
+}
+```
+
+Typische Fehler:
+
+- `400 Bad Request`: Pflichtfelder fehlen (clientId, name, owner, redirectUris)
+- `400 Bad Request`: RedirectUris enthalten ungültige URIs (müssen mit https:// oder http://localhost/ beginnen)
+
+#### PUT /api/clients/{clientId}
+
+Beschreibung: Aktualisiert eine bestehende Client-Registrierung (partielle Updates möglich).
+
+Header:
+
+```text
+x-functions-key: <function_key>
+```
+
+Request (alle Felder optional):
+
+```json
+{
+   "name": "Neuer Name",
+   "owner": "neuer-owner@example.com",
+   "redirectUris": ["https://example.com/new-callback"]
+}
+```
+
+Erfolg (200):
+
+```json
+{
+   "clientId": "my-client",
+   "name": "Neuer Name",
+   "owner": "neuer-owner@example.com",
+   "redirectUris": ["https://example.com/new-callback"]
+}
+```
+
+Typische Fehler:
+
+- `400 Bad Request`: Kein Feld zum Update angegeben
+- `400 Bad Request`: RedirectUris enthalten ungültige URIs
+- `404 Not Found`: Client mit der angegebenen clientId nicht gefunden
+
+#### DELETE /api/clients/{clientId}
+
+Beschreibung: Löscht eine Client-Registrierung.
+
+Header:
+
+```text
+x-functions-key: <function_key>
+```
+
+Erfolg (204): Keine Response-Body.
+
+Typische Fehler:
+
+- `404 Not Found`: Client mit der angegebenen clientId nicht gefunden
+
+#### GET /api/clients
+
+Beschreibung: Listet alle registrierten Clients auf.
+
+Header:
+
+```text
+x-functions-key: <function_key>
+```
+
+Erfolg (200):
+
+```json
+{
+   "clients": [
+      {
+         "clientId": "my-client",
+         "name": "Meine Anwendung",
+         "owner": "admin@example.com",
+         "redirectUris": ["https://example.com/callback"]
+      }
+   ]
+}
+```
+
 ## Fehlercodes
 
 Alle `400 Bad Request`-Antworten enthalten ein strukturiertes JSON-Objekt mit `error` (Fehlermeldung) und `errorNumber` (eindeutige Nummer):
@@ -283,6 +402,18 @@ Alle `400 Bad Request`-Antworten enthalten ein strukturiertes JSON-Objekt mit `e
 | 5003 | Keine AuthenticationRequestId übergeben | `POST /api/login` |
 | 5004 | Ungültige AuthenticationRequestId | `POST /api/login` |
 | 5005 | AuthorizationRequest abgelaufen | `POST /api/login` |
+
+### Client Management (6000-6099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 6001 | Kein gültiges Request-Objekt übergeben | `POST /api/clients`, `PUT /api/clients/{clientId}` |
+| 6002 | ClientId fehlt oder ist leer | `POST /api/clients` |
+| 6003 | Name fehlt oder ist leer | `POST /api/clients` |
+| 6004 | Owner fehlt oder ist leer | `POST /api/clients` |
+| 6005 | RedirectUris fehlt oder ist leer | `POST /api/clients`, `PUT /api/clients/{clientId}` |
+| 6006 | Mindestens ein Feld muss für Update angegeben werden | `PUT /api/clients/{clientId}` |
+| 6007 | Client nicht gefunden | `PUT /api/clients/{clientId}`, `DELETE /api/clients/{clientId}` |
 
 ## Claims- und Scope-Modell
 
@@ -370,6 +501,7 @@ func start
 - Zugangsdaten werden nicht persistiert.
 - Refresh Tokens sind nicht dauerhaft, sondern an bestehende Token-Kombinationen gebunden.
 - Fuer Produktion sollte CORS in [local.settings.json](local.settings.json) nicht offen (`*`) betrieben werden.
+- Admin-Endpunkte zur Client-Verwaltung (`/api/clients`) erfordern Function Keys und sind fuer administrative Zwecke vorgesehen.
 
 ## Bekannte Grenzen
 

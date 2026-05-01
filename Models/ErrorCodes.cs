@@ -130,4 +130,41 @@ public static class ErrorCodes
     /// AuthorizationRequest abgelaufen
     /// </summary>
     public const int LoginExpiredAuthorizationRequest = 5005;
+
+    // Client Management (6000-6099)
+    
+    /// <summary>
+    /// Kein gültiges Request-Objekt übergeben
+    /// </summary>
+    public const int ClientManagementInvalidRequestObject = 6001;
+    
+    /// <summary>
+    /// ClientId fehlt oder ist leer
+    /// </summary>
+    public const int ClientManagementMissingClientId = 6002;
+    
+    /// <summary>
+    /// Name fehlt oder ist leer
+    /// </summary>
+    public const int ClientManagementMissingName = 6003;
+    
+    /// <summary>
+    /// Owner fehlt oder ist leer
+    /// </summary>
+    public const int ClientManagementMissingOwner = 6004;
+    
+    /// <summary>
+    /// RedirectUris fehlt oder ist leer
+    /// </summary>
+    public const int ClientManagementMissingRedirectUris = 6005;
+    
+    /// <summary>
+    /// Mindestens ein Feld muss für Update angegeben werden
+    /// </summary>
+    public const int ClientManagementNoFieldsToUpdate = 6006;
+    
+    /// <summary>
+    /// Client nicht gefunden
+    /// </summary>
+    public const int ClientManagementClientNotFound = 6007;
 }
