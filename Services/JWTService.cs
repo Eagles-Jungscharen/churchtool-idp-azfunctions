@@ -135,6 +135,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
         private static Claim[] BuildClaims(CTWhoami whoami, string timeStamp, List<string> scopes, string extRef) {
             List<Claim> claims =
             [
+                new Claim(JwtRegisteredClaimNames.Sub, whoami.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Iat, timeStamp, ClaimValueTypes.Integer64),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim("firstname", whoami.FirstName ?? ""),

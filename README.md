@@ -22,6 +22,7 @@ Wichtige Komponenten:
 - [Functions/Login.cs](Functions/Login.cs): OIDC Login-Endpunkt, verarbeitet Benutzerdaten im Authorization-Code-Flow
 - [Functions/Token.cs](Functions/Token.cs): OIDC Token-Exchange fuer Authorization-Code-Grant
 - [Functions/RefreshToken.cs](Functions/RefreshToken.cs): Token-Erneuerung
+- [Functions/OpenIdConfigurationFunction.cs](Functions/OpenIdConfigurationFunction.cs): OpenID Connect Discovery-Endpoint fuer automatische Client-Konfiguration
 - [Functions/GetPublicKeys.cs](Functions/GetPublicKeys.cs): Bereitstellung von Public Keys als JWKS
 - [Services/CTLoginService.cs](Services/CTLoginService.cs): Calls gegen ChurchTools API
 - [Services/JWTService.cs](Services/JWTService.cs): JWT-Claims, Signatur, Refresh-Validierung, Key-Lifecycle
@@ -78,6 +79,32 @@ Wichtige Komponenten:
 ## API
 
 Standardmaessig verwendet Azure Functions den Prefix `/api`.
+
+### GET /api/oidc/.well-known/openid-configuration
+
+Beschreibung: OpenID Connect Discovery-Endpoint. Liefert Metadaten ueber den Identity Provider gemaess OpenID Connect Discovery 1.0 Spezifikation. Dieser Endpoint ermoeglicht OIDC-Clients die automatische Konfiguration aller Endpoints und unterstuetzten Features.
+
+Erfolg (200):
+
+```json
+{
+   "issuer": "CT_IDP",
+   "authorization_endpoint": "https://<base-url>/api/oidc/authorize",
+   "token_endpoint": "https://<base-url>/api/oidc/token",
+   "jwks_uri": "https://<base-url>/api/jwks.json",
+   "response_types_supported": ["code"],
+   "subject_types_supported": ["public"],
+   "id_token_signing_alg_values_supported": ["RS256"],
+   "grant_types_supported": ["authorization_code"],
+   "scopes_supported": ["openid"],
+   "claims_supported": ["sub", "iat", "jti", "firstname", "lastname", "email", "st_ref", "scopes"],
+   "code_challenge_methods_supported": ["S256"],
+   "token_endpoint_auth_methods_supported": ["none"],
+   "response_modes_supported": ["query"]
+}
+```
+
+Hinweis: Die Base-URL in allen Endpoint-URLs wird dynamisch aus der eingehenden Anfrage ermittelt (z.B. `http://localhost:7071` lokal oder `https://your-idp.azurewebsites.net` in Azure).
 
 ### POST /api/authenticate
 
