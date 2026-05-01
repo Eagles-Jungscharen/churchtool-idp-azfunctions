@@ -225,6 +225,65 @@ Erfolg (200):
 }
 ```
 
+## Fehlercodes
+
+Alle `400 Bad Request`-Antworten enthalten ein strukturiertes JSON-Objekt mit `error` (Fehlermeldung) und `errorNumber` (eindeutige Nummer):
+
+```json
+{
+   "error": "Fehlende Pflichtparameter",
+   "errorNumber": 1001
+}
+```
+
+### Authorize (1000-1099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 1001 | Fehlende Pflichtparameter | `GET /api/oidc/authorize` |
+| 1002 | response_type muss 'code' enthalten | `GET /api/oidc/authorize` |
+| 1003 | Unbekannte Client-ID | `GET /api/oidc/authorize` |
+| 1004 | Ungültige redirect_uri | `GET /api/oidc/authorize` |
+
+### Authenticate (2000-2099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 2001 | Kein gültiges Login-Objekt übergeben | `POST /api/authenticate` |
+| 2002 | Kein Benutzername oder Passwort übergeben | `POST /api/authenticate` |
+
+### Token (3000-3099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 3001 | Content-Type muss 'application/x-www-form-urlencoded' sein | `POST /api/oidc/token` |
+| 3002 | Fehlende Pflichtparameter | `POST /api/oidc/token` |
+| 3003 | grant_type muss 'authorization_code' sein | `POST /api/oidc/token` |
+| 3004 | Unbekannte Client-ID | `POST /api/oidc/token` |
+| 3005 | Ungültige redirect_uri | `POST /api/oidc/token` |
+| 3006 | Ungültiger Authorization Code | `POST /api/oidc/token` |
+| 3007 | Authorization Code abgelaufen | `POST /api/oidc/token` |
+| 3008 | redirect_uri stimmt nicht mit der Authorisierungsanfrage überein | `POST /api/oidc/token` |
+| 3009 | Ungültiger code_verifier | `POST /api/oidc/token` |
+
+### RefreshToken (4000-4099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 4001 | Keine Nutzlast verfügbar | `POST /api/refresh` |
+| 4002 | Kein refreshToken übermittelt | `POST /api/refresh` |
+| 4003 | Refresh und Access Token Kombination ungültig | `POST /api/refresh` |
+
+### Login (5000-5099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 5001 | Kein gültiges Login-Objekt übergeben | `POST /api/login` |
+| 5002 | Kein Benutzername oder Passwort übergeben | `POST /api/login` |
+| 5003 | Keine AuthenticationRequestId übergeben | `POST /api/login` |
+| 5004 | Ungültige AuthenticationRequestId | `POST /api/login` |
+| 5005 | AuthorizationRequest abgelaufen | `POST /api/login` |
+
 ## Claims- und Scope-Modell
 
 Die erzeugten JWTs enthalten unter anderem folgende Claims:

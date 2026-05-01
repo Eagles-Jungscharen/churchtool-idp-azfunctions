@@ -28,11 +28,19 @@ public class RefreshToken(IJWTService jwtService, ILogger<RefreshToken> logger)
 
         if (refreshRequest == null)
         {
-            return new BadRequestObjectResult("No Payload available");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Keine Nutzlast verfügbar",
+                ErrorNumber = ErrorCodes.RefreshTokenNoPayload
+            });
         }
         if (string.IsNullOrEmpty(refreshRequest.RefreshToken))
         {
-            return new BadRequestObjectResult("No refreshToken submitted");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Kein refreshToken übermittelt",
+                ErrorNumber = ErrorCodes.RefreshTokenMissingToken
+            });
         }
 
         string refreshToken = refreshRequest.RefreshToken;
@@ -44,7 +52,11 @@ public class RefreshToken(IJWTService jwtService, ILogger<RefreshToken> logger)
             Tokens tokens = await _jwtService.CreateNewTokenFromAccessToken(accessTokenShort);
             return new OkObjectResult(tokens);
         }
-        return new BadRequestObjectResult("Refresh and access Token Combination not valid");
+        return new BadRequestObjectResult(new ErrorRecord
+        {
+            Error = "Refresh und Access Token Kombination ungültig",
+            ErrorNumber = ErrorCodes.RefreshTokenInvalidCombination
+        });
     }
 }
 

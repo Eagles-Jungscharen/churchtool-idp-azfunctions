@@ -35,23 +35,39 @@ public class Authorize(ILogger<Authorize> logger, IOptions<ServiceConfiguration>
             string.IsNullOrWhiteSpace(codeChallengeMethod) ||
             string.IsNullOrWhiteSpace(state))
         {
-            return new BadRequestObjectResult("Fehlende Pflichtparameter");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Fehlende Pflichtparameter",
+                ErrorNumber = ErrorCodes.AuthorizeMissingParameters
+            });
         }
 
         if (!responseType.Contains("code", StringComparison.OrdinalIgnoreCase))
         {
-            return new BadRequestObjectResult("response_type muss 'code' enthalten");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "response_type muss 'code' enthalten",
+                ErrorNumber = ErrorCodes.AuthorizeInvalidResponseType
+            });
         }
 
         var clientInformation = await _clientInformationService.GetClientInformationByIdAsync(clientId);
         if (clientInformation == null)
         {
-            return new BadRequestObjectResult($"Unbekannte Client-ID '{clientId}'");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = $"Unbekannte Client-ID '{clientId}'",
+                ErrorNumber = ErrorCodes.AuthorizeUnknownClientId
+            });
         }
 
         if (!clientInformation.RedirectUris.Contains(redirectUri, StringComparer.Ordinal))
         {
-            return new BadRequestObjectResult($"Ungültige redirect_uri '{redirectUri}' für Client '{clientId}'");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = $"Ungültige redirect_uri '{redirectUri}' für Client '{clientId}'",
+                ErrorNumber = ErrorCodes.AuthorizeInvalidRedirectUri
+            });
         }
 
         var request = await _authorizationRequestService.StoreAuthorizationRequestAsync(codeChallenge, codeChallengeMethod, redirectUri, state);

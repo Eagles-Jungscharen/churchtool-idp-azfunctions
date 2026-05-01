@@ -32,7 +32,11 @@ public class Token(
 
         if (!req.HasFormContentType)
         {
-            return new BadRequestObjectResult("Content-Type muss 'application/x-www-form-urlencoded' sein");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Content-Type muss 'application/x-www-form-urlencoded' sein",
+                ErrorNumber = ErrorCodes.TokenInvalidContentType
+            });
         }
 
         var form = await req.ReadFormAsync();
@@ -51,51 +55,87 @@ public class Token(
             string.IsNullOrWhiteSpace(tokenRequest.ClientId) ||
             string.IsNullOrWhiteSpace(tokenRequest.RedirectUri))
         {
-            return new BadRequestObjectResult("Fehlende Pflichtparameter");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Fehlende Pflichtparameter",
+                ErrorNumber = ErrorCodes.TokenMissingParameters
+            });
         }
 
         if (!string.Equals(tokenRequest.GrantType, "authorization_code", StringComparison.Ordinal))
         {
-            return new BadRequestObjectResult("grant_type muss 'authorization_code' sein");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "grant_type muss 'authorization_code' sein",
+                ErrorNumber = ErrorCodes.TokenInvalidGrantType
+            });
         }
 
         var clientInformation = await _clientInformationService.GetClientInformationByIdAsync(tokenRequest.ClientId);
         if (clientInformation == null)
         {
-            return new BadRequestObjectResult($"Unbekannte Client-ID '{tokenRequest.ClientId}'");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = $"Unbekannte Client-ID '{tokenRequest.ClientId}'",
+                ErrorNumber = ErrorCodes.TokenUnknownClientId
+            });
         }
 
         if (!clientInformation.RedirectUris.Contains(tokenRequest.RedirectUri, StringComparer.Ordinal))
         {
-            return new BadRequestObjectResult($"Ungültige redirect_uri '{tokenRequest.RedirectUri}' für Client '{tokenRequest.ClientId}'");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = $"Ungültige redirect_uri '{tokenRequest.RedirectUri}' für Client '{tokenRequest.ClientId}'",
+                ErrorNumber = ErrorCodes.TokenInvalidRedirectUri
+            });
         }
 
         var authorizationCode = await _authorizationCodeService.GetAuthorizationCodeByIdAsync(tokenRequest.Code);
         if (authorizationCode == null)
         {
-            return new BadRequestObjectResult("Ungültiger Authorization Code");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Ungültiger Authorization Code",
+                ErrorNumber = ErrorCodes.TokenInvalidAuthorizationCode
+            });
         }
 
         if (DateTime.UtcNow - authorizationCode.CreatedAt > AuthorizationCodeLifetime)
         {
             await _authorizationCodeService.DeleteAuthorizationCodeAsync(tokenRequest.Code);
-            return new BadRequestObjectResult("Authorization Code abgelaufen");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Authorization Code abgelaufen",
+                ErrorNumber = ErrorCodes.TokenExpiredAuthorizationCode
+            });
         }
 
         if (!string.IsNullOrWhiteSpace(authorizationCode.CallbackUrl) &&
             !string.Equals(authorizationCode.CallbackUrl, tokenRequest.RedirectUri, StringComparison.Ordinal))
         {
-            return new BadRequestObjectResult("redirect_uri stimmt nicht mit der Authorisierungsanfrage überein");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "redirect_uri stimmt nicht mit der Authorisierungsanfrage überein",
+                ErrorNumber = ErrorCodes.TokenRedirectUriMismatch
+            });
         }
 
         if (!IsValidPkceS256(tokenRequest.CodeVerifier, authorizationCode.CodeChallengeMethod, authorizationCode.CodeChallenge))
         {
-            return new BadRequestObjectResult("Ungültiger code_verifier");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Ungültiger code_verifier",
+                ErrorNumber = ErrorCodes.TokenInvalidCodeVerifier
+            });
         }
 
         if (string.IsNullOrWhiteSpace(authorizationCode.StRef))
         {
-            return new BadRequestObjectResult("Ungültiger Authorization Code");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Ungültiger Authorization Code",
+                ErrorNumber = ErrorCodes.TokenInvalidAuthorizationCode
+            });
         }
 
         var ctWhoami = new CTWhoami

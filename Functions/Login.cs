@@ -26,7 +26,11 @@ public class Login(ICTLoginService loginService, IJWTService jwtService, ILogger
 
         if (loginRequest == null)
         {
-            return new BadRequestObjectResult("Kein gültiges Login-Objekt übergeben");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Kein gültiges Login-Objekt übergeben",
+                ErrorNumber = ErrorCodes.LoginInvalidLoginObject
+            });
         }
 
         string? username = loginRequest.Username;
@@ -35,23 +39,39 @@ public class Login(ICTLoginService loginService, IJWTService jwtService, ILogger
 
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
-            return new BadRequestObjectResult("Kein Benutzername oder Passwort übergeben");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Kein Benutzername oder Passwort übergeben",
+                ErrorNumber = ErrorCodes.LoginMissingCredentials
+            });
         }
 
         if (string.IsNullOrEmpty(authenticationRequestId))
         {
-            return new BadRequestObjectResult("Keine AuthenticationRequestId übergeben");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Keine AuthenticationRequestId übergeben",
+                ErrorNumber = ErrorCodes.LoginMissingAuthenticationRequestId
+            });
         }
 
         var authorizationRequest = await _authorizationRequestService.GetAuthorizationRequestByIdAsync(authenticationRequestId);
         if (authorizationRequest == null)
         {
-            return new BadRequestObjectResult("Ungültige AuthenticationRequestId");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Ungültige AuthenticationRequestId",
+                ErrorNumber = ErrorCodes.LoginInvalidAuthenticationRequestId
+            });
         }
 
         if (DateTime.UtcNow - authorizationRequest.CreatedAt > TimeSpan.FromMinutes(5))
         {
-            return new BadRequestObjectResult("AuthorizationRequest abgelaufen");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "AuthorizationRequest abgelaufen",
+                ErrorNumber = ErrorCodes.LoginExpiredAuthorizationRequest
+            });
         }
 
         LoginResult loginResult = await _loginService.DoLogin(username, password);

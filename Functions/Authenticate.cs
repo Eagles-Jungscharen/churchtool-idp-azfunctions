@@ -25,14 +25,22 @@ public class Authenticate(ICTLoginService loginService, IJWTService jwtService, 
 
         if (loginRequest == null)
         {
-            return new BadRequestObjectResult("Kein gültiges Login-Objekt übergeben");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Kein gültiges Login-Objekt übergeben",
+                ErrorNumber = ErrorCodes.AuthenticateInvalidLoginObject
+            });
         }
 
         string? username = loginRequest.Username;
         string? password = loginRequest.Password;
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
-            return new BadRequestObjectResult("Kein Benutzername oder Passwort übergeben");
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Kein Benutzername oder Passwort übergeben",
+                ErrorNumber = ErrorCodes.AuthenticateMissingCredentials
+            });
         }
 
         LoginResult loginResult = await _loginService.DoLogin(username, password);
