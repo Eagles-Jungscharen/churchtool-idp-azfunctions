@@ -83,9 +83,9 @@ public class ClientInformationService(ExtendedAzureTableClientService tableClien
         foreach (var uri in entry.RedirectUris)
         {
             if (!uri.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
-                !uri.StartsWith("http://localhost/", StringComparison.OrdinalIgnoreCase))
+                !uri.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase))
             {
-                errors.Add($"Ungültige Redirect-URI '{uri}': muss mit 'https://' oder 'http://localhost/' beginnen");
+                errors.Add($"Ungültige Redirect-URI '{uri}': muss mit 'https://' oder 'http://localhost' beginnen");
             }
         }
 
