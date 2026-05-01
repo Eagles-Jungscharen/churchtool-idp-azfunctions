@@ -4,9 +4,6 @@ namespace EaglesJungscharen.CT.IDP.Models;
 
 public class CreateClientInformationRequest
 {
-    [JsonPropertyName("clientId")]
-    public string? ClientId { get; set; }
-    
     [JsonPropertyName("name")]
     public string? Name { get; set; }
     

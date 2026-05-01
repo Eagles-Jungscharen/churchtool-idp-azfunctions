@@ -31,15 +31,6 @@ public class CreateClientInformation(IClientInformationService clientInformation
         }
 
         // Validierung der Pflichtfelder
-        if (string.IsNullOrWhiteSpace(request.ClientId))
-        {
-            return new BadRequestObjectResult(new ErrorRecord
-            {
-                Error = "ClientId fehlt oder ist leer",
-                ErrorNumber = ErrorCodes.ClientManagementMissingClientId
-            });
-        }
-
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return new BadRequestObjectResult(new ErrorRecord
@@ -70,7 +61,7 @@ public class CreateClientInformation(IClientInformationService clientInformation
         // ClientInformation erstellen
         var clientInfo = new ClientInformation
         {
-            ClientId = request.ClientId,
+            ClientId = Guid.NewGuid().ToString(),
             Name = request.Name,
             Owner = request.Owner,
             RedirectUris = request.RedirectUris

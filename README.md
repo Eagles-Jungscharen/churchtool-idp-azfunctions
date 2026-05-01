@@ -243,7 +243,6 @@ Request:
 
 ```json
 {
-   "clientId": "my-client",
    "name": "Meine Anwendung",
    "owner": "admin@example.com",
    "redirectUris": ["https://example.com/callback"]
@@ -254,7 +253,7 @@ Erfolg (201):
 
 ```json
 {
-   "clientId": "my-client",
+   "clientId": "neue Client Id",
    "name": "Meine Anwendung",
    "owner": "admin@example.com",
    "redirectUris": ["https://example.com/callback"]
