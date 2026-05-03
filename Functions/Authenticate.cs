@@ -50,7 +50,11 @@ public class Authenticate(ICTLoginService loginService, IJWTService jwtService, 
             if (ctWhoami == null)
             {
                 _logger.LogWarning("ChurchTools hatte keine Benutzerdetails nach erfolgreichem Login zurückgegeben.");
-                return new ObjectResult("Fehler beim Abrufen der Benutzerdetails von ChurchTools")
+                return new ObjectResult(new ErrorRecord
+                {
+                    Error = "Fehler beim Abrufen der Benutzerdetails von ChurchTools",
+                    ErrorNumber = ErrorCodes.AuthenticateChurchToolsUserDetailsFailed
+                })
                 {
                     StatusCode = StatusCodes.Status502BadGateway
                 };

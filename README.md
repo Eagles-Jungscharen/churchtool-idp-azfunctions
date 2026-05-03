@@ -135,7 +135,7 @@ Typische Fehler:
 
 - `400 Bad Request`: Payload fehlt oder Benutzername/Passwort fehlt
 - `401 Unauthorized`: ChurchTools-Login nicht erfolgreich
-- `502 Bad Gateway`: ChurchTools liefert nach Login keine Benutzerdetails
+- `502 Bad Gateway`: ChurchTools liefert nach Login keine Benutzerdetails (ErrorNumber: 2003)
 
 ### POST /api/refresh
 
@@ -231,7 +231,7 @@ Typische Fehler:
 - `400 Bad Request`: Payload fehlt oder Pflichtfelder fehlen
 - `400 Bad Request`: `authentication_request_id` ungueltig oder abgelaufen (> 5 Minuten)
 - `401 Unauthorized`: ChurchTools-Login nicht erfolgreich
-- `502 Bad Gateway`: ChurchTools liefert nach Login keine Benutzerdetails
+- `502 Bad Gateway`: ChurchTools liefert nach Login keine Benutzerdetails (ErrorNumber: 5006)
 
 ### GET /api/jwks.json
 

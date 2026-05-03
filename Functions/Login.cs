@@ -81,7 +81,11 @@ public class Login(ICTLoginService loginService, IJWTService jwtService, ILogger
             if (ctWhoami == null)
             {
                 _logger.LogWarning("ChurchTools returned no user details after successful login.");
-                return new ObjectResult("Fehler beim Abrufen der Benutzerdetails von ChurchTools")
+                return new ObjectResult(new ErrorRecord
+                {
+                    Error = "Fehler beim Abrufen der Benutzerdetails von ChurchTools",
+                    ErrorNumber = ErrorCodes.LoginChurchToolsUserDetailsFailed
+                })
                 {
                     StatusCode = StatusCodes.Status502BadGateway
                 };
@@ -92,7 +96,7 @@ public class Login(ICTLoginService loginService, IJWTService jwtService, ILogger
             var stRef = await _userTokenService.StoreToken(loginResult.SetCookieHeader!, loginToken);
 
             var authorizationCode = await _authorizationCodeService.StoreAuthorizationCodeAsync(ctWhoami, scopes, stRef, authorizationRequest);
-            return new RedirectResult($"{authorizationRequest.CallbackUrl}?code={Uri.EscapeDataString(authorizationCode.Id)}&state={Uri.EscapeDataString(authorizationRequest.State)}");
+            return new OkObjectResult(new {callback=$"{authorizationRequest.CallbackUrl}?code={Uri.EscapeDataString(authorizationCode.Id)}&state={Uri.EscapeDataString(authorizationRequest.State)}"});
         }
 
         _logger.LogInformation("OIDC login failed: {Error}", loginResult.Error);

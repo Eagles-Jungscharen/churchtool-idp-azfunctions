@@ -1,6 +1,7 @@
 using EaglesJungscharen.CT.IDP.Models;
 using EaglesJungscharen.CT.IDP.Models.Store;
 using EaglesJungscharen.CT.IDP.Services;
+using EaglesJungscharen.CT.IDP.Middleware;
 using GuedesPlace.AzureTools.Configuration.Extensions;
 using GuedesPlace.AzureTools.Tables;
 using Microsoft.Azure.Functions.Worker.Builder;
@@ -11,6 +12,17 @@ var builder = FunctionsApplication.CreateBuilder(args);
 
 builder.ConfigureFunctionsWebApplication();
 
+// CORS für ASP.NET Core Integration (mit Http.AspNetCore Extension)
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
+builder.UseMiddleware<CorsMiddleware>();
 var configuration = builder.Configuration;
 configuration.CheckConfigurationValuesAvailable(["AzureWebJobsStorage", "CT_URL", "LOGIN_CLIENT_URL"]);
 var storageConnectionString = configuration["AzureWebJobsStorage"]!;

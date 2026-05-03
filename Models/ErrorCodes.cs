@@ -40,6 +40,11 @@ public static class ErrorCodes
     /// </summary>
     public const int AuthenticateMissingCredentials = 2002;
 
+    /// <summary>
+    /// ChurchTools liefert nach erfolgreichem Login keine Benutzerdetails
+    /// </summary>
+    public const int AuthenticateChurchToolsUserDetailsFailed = 2003;
+
     // Token.cs (3000-3099)
     
     /// <summary>
@@ -130,6 +135,11 @@ public static class ErrorCodes
     /// AuthorizationRequest abgelaufen
     /// </summary>
     public const int LoginExpiredAuthorizationRequest = 5005;
+
+    /// <summary>
+    /// ChurchTools liefert nach erfolgreichem Login keine Benutzerdetails
+    /// </summary>
+    public const int LoginChurchToolsUserDetailsFailed = 5006;
 
     // Client Management (6000-6099)
     
