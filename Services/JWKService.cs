@@ -1,37 +1,36 @@
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Cryptography;
-using EaglesJungscharen.CT.IDP.Models;
-using System.Linq;
-using System.Collections.Generic;
-using System;
-using Microsoft.Azure.Cosmos.Table;
-using Microsoft.Azure.Cosmos.Table.Queryable;
-using Microsoft.Extensions.Logging;
+using EaglesJungscharen.CT.IDP.Models.Store;
+using GuedesPlace.AzureTools.Tables;
+
+namespace EaglesJungscharen.CT.IDP.Services;
+
+public interface IJWKService
+{
+    Task<IEnumerable<JsonWebKey>> GetPublicKeys();
+}
+
+public class JWKService(ExtendedAzureTableClientService tableClientService) : IJWKService
+{
+    private readonly TypedAzureTableClient<PublicKey> _publicKeyTableClient =
+        tableClientService.GetTypedTableClient<PublicKey>();
 
 
-namespace EaglesJungscharen.CT.IDP.Services {
-    public class JWKService {
+    public async Task<IEnumerable<JsonWebKey>> GetPublicKeys()
+    {
+        var allPK = await _publicKeyTableClient.GetAllAsync("ACCESS_PUBLIC");
+        return allPK.Select(pke => GetJWKFromPK(pke.Entity));
+    }
 
-        
-        public IEnumerable<JsonWebKey> GetPublicKeys(FunctionContext<dynamic> fc) {
-            
-            string filter = TableQuery.GenerateFilterCondition("PartitionKey", QueryComparisons.Equal, "ACCESS_PK");
-            TableQuery<PublicKeyTE> employeeQuery = new TableQuery<PublicKeyTE>().Where(filter);
-            IEnumerable<PublicKeyTE> allPK = fc.Table.ExecuteQuery(employeeQuery);
-            return allPK.Select(pke=> {
-                JsonWebKey jwk = this.GetJWKFromPK(pke);
-                return jwk;
-            });
+    public static JsonWebKey GetJWKFromPK(PublicKey pke)
+    {
+        using RSA rsa = RSA.Create();
+        rsa.ImportRSAPublicKey(Convert.FromBase64String(pke.PublicKeyValue!), out _);
+        RsaSecurityKey rsaSecurity = new(rsa)
+        {
+            KeyId = pke.KeyId
+        };
 
-       }
-
-       public JsonWebKey GetJWKFromPK(PublicKeyTE pke) {
-           RSA rsa = RSA.Create();
-           rsa.ImportRSAPublicKey(Convert.FromBase64String(pke.PublicKey), out _);
-           RsaSecurityKey rsaSecurity = new RsaSecurityKey(rsa);
-           rsaSecurity.KeyId = pke.RowKey;
-           
-           return JsonWebKeyConverter.ConvertFromRSASecurityKey(rsaSecurity);
-       }
+        return JsonWebKeyConverter.ConvertFromRSASecurityKey(rsaSecurity);
     }
 }
