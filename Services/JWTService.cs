@@ -122,7 +122,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             var unixTimeSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
             var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes, extRef);
             var jwt = new JwtSecurityToken(
-                audience: "ct.auth",
+                audience: "ct-auth",
                 issuer: issuer,
                 claims: claims,
                 notBefore: now,
@@ -162,7 +162,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             var unixTimeSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
             var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes, extRef);
             var jwt = new JwtSecurityToken(
-                audience: "ct.test.",
+                audience: "ct-auth",
                 issuer: issuer,
                 claims: claims,
                 notBefore: now,
