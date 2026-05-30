@@ -146,7 +146,8 @@ public class Token(
             Email = authorizationCode.Email
         };
 
-        var tokens = await _jwtService.BuildJWTToken(ctWhoami, authorizationCode.Scopes, authorizationCode.StRef);
+        string issuer = $"{req.Scheme}://{req.Host.Value}/api/oidc";
+        var tokens = await _jwtService.BuildJWTToken(ctWhoami, authorizationCode.Scopes, authorizationCode.StRef, issuer);
         await _authorizationCodeService.DeleteAuthorizationCodeAsync(tokenRequest.Code);
 
         return new OkObjectResult(tokens);

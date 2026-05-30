@@ -49,7 +49,8 @@ public class RefreshToken(IJWTService jwtService, ILogger<RefreshToken> logger)
 
         if (await _jwtService.CheckRefreshToken(refreshToken, accessTokenShort))
         {
-            Tokens tokens = await _jwtService.CreateNewTokenFromAccessToken(accessTokenShort);
+            string issuer = $"{req.Scheme}://{req.Host.Value}/api/oidc";
+            Tokens tokens = await _jwtService.CreateNewTokenFromAccessToken(accessTokenShort, issuer);
             return new OkObjectResult(tokens);
         }
         return new BadRequestObjectResult(new ErrorRecord

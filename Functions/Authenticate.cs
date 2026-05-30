@@ -63,7 +63,8 @@ public class Authenticate(ICTLoginService loginService, IJWTService jwtService, 
             List<string> scopes = [.. groups.Select(gc => "ct_group_" + gc.Group?.DomainIdentifier)];
             var loginToken = await _loginService.GetLoginToken(loginResult.SetCookieHeader!, ctWhoami.Id);
             var extRef = await _userTokenService.StoreToken(loginResult.SetCookieHeader!, loginToken);
-            Tokens tokens = await _jwtService.BuildJWTToken(ctWhoami, scopes, extRef);
+            string issuer = $"{req.Scheme}://{req.Host.Value}/api/oidc";
+            Tokens tokens = await _jwtService.BuildJWTToken(ctWhoami, scopes, extRef, issuer);
             return new OkObjectResult(tokens);
         }
         _logger.LogInformation("Result: {Error}", loginResult.Error);

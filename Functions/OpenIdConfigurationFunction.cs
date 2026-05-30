@@ -22,7 +22,7 @@ public class OpenIdConfigurationFunction
         var configuration = new OpenIdConfiguration
         {
             // Issuer - muss mit iss-Claim in JWTs übereinstimmen
-            Issuer = "CT_IDP",
+            Issuer = $"{baseUrl}{apiPrefix}/oidc",
 
             // Erforderliche Endpoints
             AuthorizationEndpoint = $"{baseUrl}{apiPrefix}/oidc/authorize",

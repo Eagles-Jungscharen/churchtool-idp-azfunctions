@@ -12,9 +12,9 @@ using GuedesPlace.AzureTools.Tables;
 namespace EaglesJungscharen.CT.IDP.Services {
     
     public interface IJWTService {
-        Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes, string extRef);
+        Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes, string extRef, string issuer);
         Task<bool> CheckRefreshToken(string refreshToken, string accessToken);
-        Task<Tokens> CreateNewTokenFromAccessToken(string accessToken);
+        Task<Tokens> CreateNewTokenFromAccessToken(string accessToken, string issuer);
     }
 
     public class JWTService(ExtendedAzureTableClientService tableClientService, ILogger<JWTService> logger) : IJWTService {
@@ -65,10 +65,10 @@ namespace EaglesJungscharen.CT.IDP.Services {
             await _privateKeyTableClient.InsertOrReplaceAsync( "LATEST","ACCESS_PRIVATE", pk);
         }
 
-        public async Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes, string extRef) {
+        public async Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes, string extRef, string issuer) {
             await CheckKeys();
-            string idToken = CreateIDToken(whoami, scopes, extRef);
-            string accessToken = CreateAccessToken(whoami, scopes, extRef);
+            string idToken = CreateIDToken(whoami, scopes, extRef, issuer);
+            string accessToken = CreateAccessToken(whoami, scopes, extRef, issuer);
             string refreshToken = await CreateRefreshToken(accessToken);
             return Tokens.BuildTokens(idToken, accessToken, refreshToken, Expires_In_AccessToken);
         }
@@ -109,7 +109,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             }
         }
 
-        private string CreateIDToken(CTWhoami whoami, List<string> scopes, string extRef) {
+        private string CreateIDToken(CTWhoami whoami, List<string> scopes, string extRef, string issuer) {
             RsaSecurityKey rsaKey = new(_privateRSAKey)
             {
                 KeyId = _keyId
@@ -123,7 +123,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes, extRef);
             var jwt = new JwtSecurityToken(
                 audience: "ct.auth",
-                issuer: "CT_IDP",
+                issuer: issuer,
                 claims: claims,
                 notBefore: now,
                 expires: now.AddSeconds(Expires_In_AccessToken),
@@ -149,7 +149,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             return [.. claims];
         }
 
-        private string CreateAccessToken(CTWhoami whoami, List<string> scopes, string extRef) {
+        private string CreateAccessToken(CTWhoami whoami, List<string> scopes, string extRef, string issuer) {
             RsaSecurityKey rsaKey = new(_privateRSAKey)
             {
                 KeyId = _keyId
@@ -163,7 +163,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes, extRef);
             var jwt = new JwtSecurityToken(
                 audience: "ct.test.",
-                issuer: "CT_IDP",
+                issuer: issuer,
                 claims: claims,
                 notBefore: now,
                 expires: now.AddSeconds(Expires_In_AccessToken),
@@ -205,7 +205,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             }
         }
 
-        public Task<Tokens> CreateNewTokenFromAccessToken(string accessToken) {
+        public Task<Tokens> CreateNewTokenFromAccessToken(string accessToken, string issuer) {
             JwtSecurityTokenHandler jsth = new();
             JwtSecurityToken token = jsth.ReadJwtToken(accessToken);
             CTWhoami cTWhoami = new()
@@ -216,7 +216,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             };
             var extRef = token.Claims.First(claim => claim.Type == "st_ref").Value;
             List<string> scopes = token.Claims.Where(claim => claim.Type == "scopes").Select(fclaim => fclaim.Value).ToList();
-            return BuildJWTToken(cTWhoami, scopes, extRef);
+            return BuildJWTToken(cTWhoami, scopes, extRef, issuer);
         }
     }
 }
