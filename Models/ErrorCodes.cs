@@ -177,4 +177,23 @@ public static class ErrorCodes
     /// Client nicht gefunden
     /// </summary>
     public const int ClientManagementClientNotFound = 6007;
+
+    // UserInfo.cs (7000-7099)
+
+    /// <summary>
+    /// Kein Bearer Token im Authorization-Header
+    /// </summary>
+    public const int UserInfoMissingToken = 7001;
+
+    /// <summary>
+    /// Ungültiger Access Token
+    /// </summary>
+    public const int UserInfoInvalidToken = 7002;
+
+    // EndSession.cs (8000-8099)
+
+    /// <summary>
+    /// Ungültige post_logout_redirect_uri
+    /// </summary>
+    public const int EndSessionInvalidRedirectUri = 8001;
 }

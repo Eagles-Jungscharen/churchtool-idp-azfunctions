@@ -12,9 +12,10 @@ using GuedesPlace.AzureTools.Tables;
 namespace EaglesJungscharen.CT.IDP.Services {
     
     public interface IJWTService {
-        Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes, string extRef, string issuer);
+        Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes, string extRef, string issuer, string audience, string? nonce = null);
         Task<bool> CheckRefreshToken(string refreshToken, string accessToken);
         Task<Tokens> CreateNewTokenFromAccessToken(string accessToken, string issuer);
+        Task<Tokens?> UseRefreshTokenAsync(string refreshToken, string issuer, string audience);
     }
 
     public class JWTService(ExtendedAzureTableClientService tableClientService, ILogger<JWTService> logger) : IJWTService {
@@ -65,12 +66,12 @@ namespace EaglesJungscharen.CT.IDP.Services {
             await _privateKeyTableClient.InsertOrReplaceAsync( "LATEST","ACCESS_PRIVATE", pk);
         }
 
-        public async Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes, string extRef, string issuer) {
+        public async Task<Tokens> BuildJWTToken(CTWhoami whoami, List<string> scopes, string extRef, string issuer, string audience, string? nonce = null) {
             await CheckKeys();
-            string idToken = CreateIDToken(whoami, scopes, extRef, issuer);
-            string accessToken = CreateAccessToken(whoami, scopes, extRef, issuer);
+            string idToken = CreateIDToken(whoami, scopes, extRef, issuer, audience, nonce);
+            string accessToken = CreateAccessToken(whoami, scopes, extRef, issuer, audience);
             string refreshToken = await CreateRefreshToken(accessToken);
-            return Tokens.BuildTokens(idToken, accessToken, refreshToken, Expires_In_AccessToken);
+            return Tokens.BuildTokens(idToken, accessToken, refreshToken, Expires_In_AccessToken, scopes);
         }
 
         private async Task CheckKeys() {
@@ -109,7 +110,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             }
         }
 
-        private string CreateIDToken(CTWhoami whoami, List<string> scopes, string extRef, string issuer) {
+        private string CreateIDToken(CTWhoami whoami, List<string> scopes, string extRef, string issuer, string audience, string? nonce) {
             RsaSecurityKey rsaKey = new(_privateRSAKey)
             {
                 KeyId = _keyId
@@ -120,9 +121,9 @@ namespace EaglesJungscharen.CT.IDP.Services {
             };
             var now = DateTime.Now;
             var unixTimeSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
-            var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes, extRef);
+            var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes, extRef, nonce);
             var jwt = new JwtSecurityToken(
-                audience: "ct-auth",
+                audience: audience,
                 issuer: issuer,
                 claims: claims,
                 notBefore: now,
@@ -132,7 +133,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             return new JwtSecurityTokenHandler().WriteToken(jwt);
         }
 
-        private static Claim[] BuildClaims(CTWhoami whoami, string timeStamp, List<string> scopes, string extRef) {
+        private static Claim[] BuildClaims(CTWhoami whoami, string timeStamp, List<string> scopes, string extRef, string? nonce = null) {
             List<Claim> claims =
             [
                 new Claim(JwtRegisteredClaimNames.Sub, whoami.Id.ToString()),
@@ -143,13 +144,16 @@ namespace EaglesJungscharen.CT.IDP.Services {
                 new Claim("email", whoami.Email ?? ""),
                 new Claim("st_ref", extRef),
             ];
+            if (!string.IsNullOrEmpty(nonce)) {
+                claims.Add(new Claim(JwtRegisteredClaimNames.Nonce, nonce));
+            }
             if (scopes.Count > 0) {
                 claims.AddRange(scopes.Select(val => new Claim("scopes", val)));
             }
             return [.. claims];
         }
 
-        private string CreateAccessToken(CTWhoami whoami, List<string> scopes, string extRef, string issuer) {
+        private string CreateAccessToken(CTWhoami whoami, List<string> scopes, string extRef, string issuer, string audience) {
             RsaSecurityKey rsaKey = new(_privateRSAKey)
             {
                 KeyId = _keyId
@@ -162,7 +166,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             var unixTimeSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
             var claims = BuildClaims(whoami, unixTimeSeconds.ToString(), scopes, extRef);
             var jwt = new JwtSecurityToken(
-                audience: "ct-auth",
+                audience: audience,
                 issuer: issuer,
                 claims: claims,
                 notBefore: now,
@@ -210,13 +214,31 @@ namespace EaglesJungscharen.CT.IDP.Services {
             JwtSecurityToken token = jsth.ReadJwtToken(accessToken);
             CTWhoami cTWhoami = new()
             {
-                FirstName = token.Claims.First(claim => claim.Type == "firstname").Value,
-                LastName = token.Claims.First(claim => claim.Type == "lastname").Value,
-                Email = token.Claims.First(claim => claim.Type == "email").Value
+                Id = int.TryParse(token.Claims.FirstOrDefault(claim => claim.Type == JwtRegisteredClaimNames.Sub)?.Value, out var id) ? id : 0,
+                FirstName = token.Claims.FirstOrDefault(claim => claim.Type == "firstname")?.Value,
+                LastName = token.Claims.FirstOrDefault(claim => claim.Type == "lastname")?.Value,
+                Email = token.Claims.FirstOrDefault(claim => claim.Type == "email")?.Value
             };
             var extRef = token.Claims.First(claim => claim.Type == "st_ref").Value;
+            var audience = token.Audiences.FirstOrDefault() ?? "ct-auth";
             List<string> scopes = token.Claims.Where(claim => claim.Type == "scopes").Select(fclaim => fclaim.Value).ToList();
-            return BuildJWTToken(cTWhoami, scopes, extRef, issuer);
+            return BuildJWTToken(cTWhoami, scopes, extRef, issuer, audience);
+        }
+
+        public async Task<Tokens?> UseRefreshTokenAsync(string refreshToken, string issuer, string audience) {
+            try {
+                var response = await _refreshTokenTableClient.GetByIdAsync(refreshToken, "REFRESH_TOKEN");
+                var storedToken = response?.Entity;
+                if (storedToken == null) {
+                    _logger.LogInformation("Refresh token not found: {RefreshToken}", refreshToken);
+                    return null;
+                }
+                await _refreshTokenTableClient.DeleteEntityAsync(storedToken.RefreshTokenValue, "REFRESH_TOKEN");
+                return await CreateNewTokenFromAccessToken(storedToken.AccessToken, issuer);
+            } catch (Azure.RequestFailedException ex) when (ex.Status == 404) {
+                _logger.LogInformation("Refresh token not found: {RefreshToken}", refreshToken);
+                return null;
+            }
         }
     }
 }

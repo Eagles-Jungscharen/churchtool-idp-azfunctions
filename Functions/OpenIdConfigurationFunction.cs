@@ -28,6 +28,8 @@ public class OpenIdConfigurationFunction
             AuthorizationEndpoint = $"{baseUrl}{apiPrefix}/oidc/authorize",
             TokenEndpoint = $"{baseUrl}{apiPrefix}/oidc/token",
             JwksUri = $"{baseUrl}{apiPrefix}/jwks.json",
+            UserInfoEndpoint = $"{baseUrl}{apiPrefix}/oidc/userinfo",
+            EndSessionEndpoint = $"{baseUrl}{apiPrefix}/oidc/end_session",
 
             // Erforderliche unterstützte Werte
             ResponseTypesSupported = ["code"],
@@ -35,7 +37,7 @@ public class OpenIdConfigurationFunction
             IdTokenSigningAlgValuesSupported = ["RS256"],
 
             // Empfohlene unterstützte Werte
-            GrantTypesSupported = ["authorization_code"],
+            GrantTypesSupported = ["authorization_code", "refresh_token"],
             ScopesSupported = ["openid"],
             ClaimsSupported = [
                 "sub",

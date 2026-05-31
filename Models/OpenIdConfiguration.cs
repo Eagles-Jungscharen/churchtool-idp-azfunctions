@@ -84,4 +84,16 @@ public class OpenIdConfiguration
     /// </summary>
     [JsonPropertyName("response_modes_supported")]
     public List<string>? ResponseModesSupported { get; set; }
+
+    /// <summary>
+    /// URL des UserInfo-Endpoints zum Abruf von Nutzer-Claims nach der Authentifizierung
+    /// </summary>
+    [JsonPropertyName("userinfo_endpoint")]
+    public string? UserInfoEndpoint { get; set; }
+
+    /// <summary>
+    /// URL des End-Session-Endpoints für OIDC-Logout
+    /// </summary>
+    [JsonPropertyName("end_session_endpoint")]
+    public string? EndSessionEndpoint { get; set; }
 }

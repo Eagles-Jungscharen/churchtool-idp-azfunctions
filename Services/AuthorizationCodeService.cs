@@ -30,6 +30,8 @@ public class AuthorizationCodeService(ExtendedAzureTableClientService tableClien
             CodeChallengeMethod = authorizationRequest.CodeChallengeMethod,
             CallbackUrl = authorizationRequest.CallbackUrl,
             StRef = stRef,
+            Nonce = authorizationRequest.Nonce,
+            ClientId = authorizationRequest.ClientId,
             CreatedAt = DateTime.UtcNow
         };
 
