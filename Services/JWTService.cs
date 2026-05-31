@@ -16,6 +16,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
         Task<bool> CheckRefreshToken(string refreshToken, string accessToken);
         Task<Tokens> CreateNewTokenFromAccessToken(string accessToken, string issuer);
         Task<Tokens?> UseRefreshTokenAsync(string refreshToken, string issuer, string audience);
+        Task CheckKeys();
     }
 
     public class JWTService(ExtendedAzureTableClientService tableClientService, ILogger<JWTService> logger) : IJWTService {
@@ -75,7 +76,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
             return Tokens.BuildTokens(idToken, accessToken, refreshToken, Expires_In_AccessToken, scopes);
         }
 
-        private async Task CheckKeys() {
+        public async Task CheckKeys() {
             if (_privateRSAKey == null) {
                 if (!await LoadKeys()) {
                     await CreateNewKey();
