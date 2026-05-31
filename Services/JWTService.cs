@@ -42,27 +42,27 @@ namespace EaglesJungscharen.CT.IDP.Services {
            _keyId = Guid.NewGuid().ToString();
            DateTime expiresIn = DateTime.UtcNow;
            expiresIn = expiresIn.AddSeconds(Expires_In_PrivateKey);
-           await StorePublicKey(rsa.ExportRSAPublicKey(), expiresIn);
-           await StorePrivateKey(rsa.ExportRSAPrivateKey(), expiresIn);
+           await StorePublicKey(_keyId, rsa.ExportRSAPublicKey(), expiresIn);
+           await StorePrivateKey(_keyId, rsa.ExportRSAPrivateKey(), expiresIn);
         }
 
-        private async Task StorePublicKey(byte[] pkAsBytes, DateTime expiresIn) {
+        private async Task StorePublicKey(string keyId, byte[] pkAsBytes, DateTime expiresIn) {
             PublicKey pk = new()
             {
-                KeyId = _keyId!,
+                KeyId = keyId,
                 Expires = expiresIn,
                 PublicKeyValue = Convert.ToBase64String(pkAsBytes)
             };
             await _publicKeyTableClient.InsertOrReplaceAsync(pk.KeyId, "ACCESS_PUBLIC", pk);
         }
 
-        private async Task StorePrivateKey(byte[] privateKeyAsBytes, DateTime expiresIn) {
+        private async Task StorePrivateKey(string keyId, byte[] privateKeyAsBytes, DateTime expiresIn) {
             PrivateKey pk = new()
             {
-                KeyId = _keyId!,
+                KeyId = keyId,
                 Expires = expiresIn,
                 PrivateKeyValue = Convert.ToBase64String(privateKeyAsBytes),
-                PublicKeyId = _keyId!
+                PublicKeyId = keyId
             };
             await _privateKeyTableClient.InsertOrReplaceAsync( "LATEST","ACCESS_PRIVATE", pk);
         }
@@ -86,7 +86,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
         private async Task<bool> LoadKeys() {
             _logger.LogInformation("Loading Keys");
             try {
-                var response = await _privateKeyTableClient.GetByIdAsync("ACCESS_PRIVATE", "LATEST");
+                var response = await _privateKeyTableClient.GetByIdAsync( "LATEST", "ACCESS_PRIVATE");
                 var pke = response?.Entity;
 
                 if(pke == null) {
@@ -221,13 +221,13 @@ namespace EaglesJungscharen.CT.IDP.Services {
             CTWhoami cTWhoami = new()
             {
                 Id = int.TryParse(token.Claims.FirstOrDefault(claim => claim.Type == JwtRegisteredClaimNames.Sub)?.Value, out var id) ? id : 0,
-                FirstName = token.Claims.FirstOrDefault(claim => claim.Type == "firstname")?.Value,
-                LastName = token.Claims.FirstOrDefault(claim => claim.Type == "lastname")?.Value,
+                FirstName = token.Claims.FirstOrDefault(claim => claim.Type == "given_name")?.Value,
+                LastName = token.Claims.FirstOrDefault(claim => claim.Type == "family_name")?.Value,
                 Email = token.Claims.FirstOrDefault(claim => claim.Type == "email")?.Value
             };
             var extRef = token.Claims.First(claim => claim.Type == "st_ref").Value;
             var audience = token.Audiences.FirstOrDefault() ?? "ct-auth";
-            List<string> scopes = token.Claims.Where(claim => claim.Type == "scopes").Select(fclaim => fclaim.Value).ToList();
+            List<string> scopes = [.. token.Claims.Where(claim => claim.Type == "scopes").Select(fclaim => fclaim.Value)];
             return BuildJWTToken(cTWhoami, scopes, extRef, issuer, audience);
         }
 
@@ -245,6 +245,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
                     return null;
                 }
                 await _refreshTokenTableClient.DeleteEntityAsync(storedToken.RefreshTokenValue, "REFRESH_TOKEN");
+                _logger.LogInformation("Refresh token used and deleted: {RefreshToken}", refreshToken);
                 return await CreateNewTokenFromAccessToken(storedToken.AccessToken, issuer);
             } catch (Azure.RequestFailedException ex) when (ex.Status == 404) {
                 _logger.LogInformation("Refresh token not found: {RefreshToken}", refreshToken);

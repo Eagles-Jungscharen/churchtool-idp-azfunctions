@@ -100,6 +100,7 @@ public class Token(
         var tokens = await _jwtService.UseRefreshTokenAsync(refreshToken, issuer, clientId);
         if (tokens == null)
         {
+            _logger.LogWarning("Ungültiger oder abgelaufener Refresh Token für client {ClientId} / {RefreshToken}", clientId, refreshToken);
             return new BadRequestObjectResult(new ErrorRecord
             {
                 Error = "Ungültiger oder abgelaufener Refresh Token",
