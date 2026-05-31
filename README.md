@@ -1,6 +1,663 @@
 # churchtool-idp-azfunctions
 
-Identity Provider (IDP) fuer ChurchTools auf Basis von Azure Functions (.NET Isolated). Das Projekt authentifiziert Benutzer gegen ChurchTools, erstellt signierte JWTs und stellt einen JWKS-Endpunkt fuer die Token-Pruefung bereit.
+Identity Provider (IDP) fuer ChurchTools auf Basis von Azure Functions (.NET Isolated). Das Projekt authentifiziert Benutzer gegen ChurchTools, erstellt RSA-signierte JWTs und stellt einen vollstaendigen OpenID Connect (OIDC) Authorization-Code-Flow mit PKCE bereit.
+
+## Ziel des Projekts
+
+Dieser Dienst uebersetzt ChurchTools-Logins in ein OIDC-konformes Authentifizierungsmodell, damit andere Anwendungen (z.B. SPAs mit `oidc-client-ts`) ChurchTools-Benutzer ueber den Standard Authorization-Code-Flow mit PKCE authentifizieren und autorisieren koennen.
+
+## Architekturueberblick
+
+Das Projekt besteht aus drei Ebenen:
+
+- Functions als HTTP-Einstiegspunkte
+- Services fuer ChurchTools-Integration, Token-Erzeugung und Key-Verwaltung
+- Models fuer Requests/Responses und Table-Storage-Entitaeten
+
+Wichtige Komponenten:
+
+- [Program.cs](Program.cs): DI-Setup, HttpClient-Registrierung, Table-Client-Registrierung
+- [Functions/Authenticate.cs](Functions/Authenticate.cs): Direkter Login gegen ChurchTools und Token-Ausgabe (non-OIDC)
+- [Functions/Oidc/Authorize.cs](Functions/Oidc/Authorize.cs): OIDC Authorization-Endpunkt, initiiert den Authorization-Code-Flow
+- [Functions/Login.cs](Functions/Login.cs): OIDC Login-Endpunkt, verarbeitet Benutzerdaten im Authorization-Code-Flow
+- [Functions/Oidc/Token.cs](Functions/Oidc/Token.cs): OIDC Token-Exchange fuer Authorization-Code- und Refresh-Token-Grant
+- [Functions/Oidc/UserInfo.cs](Functions/Oidc/UserInfo.cs): OIDC UserInfo-Endpoint, gibt Claims des authentifizierten Nutzers zurueck
+- [Functions/Oidc/EndSession.cs](Functions/Oidc/EndSession.cs): OIDC End-Session-Endpoint fuer Logout
+- [Functions/Oidc/OpenIdConfigurationFunction.cs](Functions/Oidc/OpenIdConfigurationFunction.cs): OpenID Connect Discovery-Endpoint
+- [Functions/RefreshToken.cs](Functions/RefreshToken.cs): Token-Erneuerung (non-OIDC, Legacy)
+- [Functions/GetPublicKeys.cs](Functions/GetPublicKeys.cs): Bereitstellung von Public Keys als JWKS
+- [Services/CTLoginService.cs](Services/CTLoginService.cs): Calls gegen ChurchTools API
+- [Services/JWTService.cs](Services/JWTService.cs): JWT-Claims, Signatur, Refresh-Validierung, Key-Lifecycle
+- [Services/JWKService.cs](Services/JWKService.cs): Umwandlung gespeicherter Public Keys in JWK
+- [Services/UserTokenService.cs](Services/UserTokenService.cs): Speicherung der ChurchTools-Sessionreferenz
+- [Services/AuthorizationCodeService.cs](Services/AuthorizationCodeService.cs): Erzeugung und Validierung von Authorization Codes
+- [Services/AuthorizationRequestService.cs](Services/AuthorizationRequestService.cs): Speicherung und Abruf von Authorization Requests
+- [Services/ClientInformationService.cs](Services/ClientInformationService.cs): Verwaltung registrierter OAuth-Clients
+
+## End-to-End Funktionsweise
+
+### 1. Authentifizierung (non-OIDC)
+
+1. Client sendet Benutzername/Passwort an den Endpoint `authenticate`.
+2. Der Dienst fuehrt Login gegen ChurchTools aus.
+3. Bei Erfolg werden Benutzerprofil und Gruppen geladen.
+4. Gruppen werden in Scopes umgewandelt (`ct_group_<domainIdentifier>`).
+5. Es werden `id_token`, `access_token` und `refresh_token` erzeugt.
+6. Das Token-Set wird im OAuth-ueblichen Format zurueckgegeben.
+
+### 2. Token-Refresh (non-OIDC, Legacy)
+
+1. Client sendet `refreshToken` im Body und `Authorization: Bearer <access_token>` im Header.
+2. Der Dienst prueft, ob Refresh-Token und Access-Token zusammenpassen.
+3. Bei Erfolg wird das alte Refresh-Token entfernt und ein neues Token-Set erstellt.
+
+### 3. OIDC Authorization-Code-Flow
+
+Dieser Flow ist kompatibel mit `oidc-client-ts` und anderen OIDC-Bibliotheken.
+
+#### Schritt 1: Authorization Request
+
+1. Client sendet `GET /api/oidc/authorize` mit `response_type=code`, `client_id`, `redirect_uri`, `code_challenge`, `code_challenge_method` (S256), `state`, `nonce` und optional `scope`.
+2. Der Dienst validiert die Parameter und prueft `client_id` sowie `redirect_uri` gegen die registrierten Client-Daten.
+3. Der Authorization Request (inkl. PKCE-Challenge, Nonce, Client-ID und Scope) wird gespeichert.
+4. Der Benutzer wird an die Login-Seite (`LOGIN_CLIENT_URL`) weitergeleitet.
+
+#### Schritt 2: OIDC Login
+
+1. Die Login-Seite sendet Benutzername, Passwort und die `authentication_request_id` an `POST /api/login`.
+2. Der Dienst validiert den Authorization Request und prueft, ob er noch gueltig ist (max. 5 Minuten).
+3. Bei erfolgreichem ChurchTools-Login werden OIDC-Scopes (aus dem Authorization Request) und ChurchTools-Gruppen-Scopes zusammengefuehrt.
+4. Ein Authorization Code wird erzeugt und der Client mit `code` und `state` an die `redirect_uri` weitergeleitet.
+
+#### Schritt 3: Token-Exchange (Authorization Code)
+
+1. Client sendet `application/x-www-form-urlencoded` an `POST /api/oidc/token`.
+2. Der Dienst validiert `grant_type=authorization_code`, `code`, `code_verifier`, `client_id` und `redirect_uri`.
+3. Der Authorization Code wird auf Gueltigkeit, Ablaufzeit (max. 5 Minuten) und PKCE (`S256`) geprueft.
+4. Bei Erfolg wird der Code einmalig verbraucht und ein neues Token-Set zurueckgegeben.
+5. Das `id_token` enthaelt den `nonce`-Claim und `aud` ist auf die `client_id` gesetzt.
+
+#### Schritt 4: Token-Refresh (OIDC)
+
+1. Client sendet `grant_type=refresh_token&refresh_token=<token>&client_id=<client_id>` an `POST /api/oidc/token`.
+2. Der Dienst prueft das Refresh-Token auf Gueltigkeit und Ablauf (30 Tage).
+3. Bei Erfolg wird das Refresh-Token einmalig verbraucht und ein neues Token-Set zurueckgegeben.
+
+#### Schritt 5: UserInfo
+
+1. Client sendet `GET /api/oidc/userinfo` mit `Authorization: Bearer <access_token>`.
+2. Der Dienst extrahiert Claims aus dem Access Token und gibt sie als JSON zurueck.
+
+#### Schritt 6: Logout
+
+1. Client sendet `GET /api/oidc/end_session?post_logout_redirect_uri=<uri>`.
+2. Der Dienst prueft die Redirect-URI und leitet den Benutzer weiter (oder gibt 200 zurueck).
+
+### 4. Public Key Discovery
+
+1. Ein konsumierender Dienst ruft den JWKS-Endpoint auf.
+2. Die aktuell gespeicherten Public Keys werden als `keys`-Array zurueckgegeben.
+3. Downstream-Systeme koennen damit JWT-Signaturen offline validieren.
+
+## API
+
+Standardmaessig verwendet Azure Functions den Prefix `/api`.
+
+### GET /api/oidc/.well-known/openid-configuration
+
+Beschreibung: OpenID Connect Discovery-Endpoint. Liefert Metadaten ueber den Identity Provider gemaess OpenID Connect Discovery 1.0 Spezifikation.
+
+Erfolg (200):
+
+```json
+{
+   "issuer": "https://<base-url>/api/oidc",
+   "authorization_endpoint": "https://<base-url>/api/oidc/authorize",
+   "token_endpoint": "https://<base-url>/api/oidc/token",
+   "userinfo_endpoint": "https://<base-url>/api/oidc/userinfo",
+   "end_session_endpoint": "https://<base-url>/api/oidc/end_session",
+   "jwks_uri": "https://<base-url>/api/jwks.json",
+   "response_types_supported": ["code"],
+   "subject_types_supported": ["public"],
+   "id_token_signing_alg_values_supported": ["RS256"],
+   "grant_types_supported": ["authorization_code", "refresh_token"],
+   "scopes_supported": ["openid", "profile", "email", "offline_access"],
+   "claims_supported": ["sub", "name", "given_name", "family_name", "email", "email_verified", "iat", "jti", "st_ref", "scopes"],
+   "code_challenge_methods_supported": ["S256"],
+   "token_endpoint_auth_methods_supported": ["none"],
+   "response_modes_supported": ["query"]
+}
+```
+
+Hinweis: Die Base-URL in allen Endpoint-URLs wird dynamisch aus der eingehenden Anfrage ermittelt (z.B. `http://localhost:7071` lokal oder `https://your-idp.azurewebsites.net` in Azure).
+
+### POST /api/authenticate
+
+Beschreibung: Fuehrt Login gegen ChurchTools durch und gibt ein neues Token-Set zurueck (non-OIDC).
+
+Request:
+
+```json
+{
+   "username": "<churchtools-user>",
+   "password": "<churchtools-password>"
+}
+```
+
+Erfolg (200):
+
+```json
+{
+   "id_token": "...",
+   "access_token": "...",
+   "refresh_token": "...",
+   "expires_in": 3600,
+   "token_type": "Bearer",
+   "scope": "openid ct_group_..."
+}
+```
+
+Typische Fehler:
+
+- `400 Bad Request`: Payload fehlt oder Benutzername/Passwort fehlt
+- `401 Unauthorized`: ChurchTools-Login nicht erfolgreich
+- `502 Bad Gateway`: ChurchTools liefert nach Login keine Benutzerdetails (ErrorNumber: 2003)
+
+### POST /api/refresh
+
+Beschreibung: Erneuert Tokens auf Basis eines gueltigen Token-Paars (non-OIDC, Legacy).
+
+Header:
+
+```text
+Authorization: Bearer <access_token>
+```
+
+Request:
+
+```json
+{
+   "refreshToken": "<refresh-token>"
+}
+```
+
+Erfolg (200): gleiches Response-Format wie bei `/api/authenticate`.
+
+Typische Fehler:
+
+- `401 Unauthorized`: Authorization Header fehlt/ungueltig
+- `400 Bad Request`: Payload oder refreshToken fehlt
+- `400 Bad Request`: Kombination aus Refresh- und Access-Token ist ungueltig
+
+### POST /api/oidc/token
+
+Beschreibung: Token-Endpunkt fuer den OIDC Authorization-Code-Flow und den Refresh-Token-Flow.
+
+Header:
+
+```text
+Content-Type: application/x-www-form-urlencoded
+```
+
+**Authorization Code Grant:**
+
+```text
+grant_type=authorization_code&code=<authorization-code>&code_verifier=<pkce-verifier>&client_id=<client-id>&redirect_uri=<redirect-uri>
+```
+
+**Refresh Token Grant:**
+
+```text
+grant_type=refresh_token&refresh_token=<refresh-token>&client_id=<client-id>
+```
+
+Erfolg (200):
+
+```json
+{
+   "id_token": "...",
+   "access_token": "...",
+   "refresh_token": "...",
+   "expires_in": 3600,
+   "token_type": "Bearer",
+   "scope": "openid profile email ct_group_..."
+}
+```
+
+Typische Fehler:
+
+- `400 Bad Request`: Pflichtparameter fehlen
+- `400 Bad Request`: `grant_type` ist ungueltig (weder `authorization_code` noch `refresh_token`)
+- `400 Bad Request`: `client_id` oder `redirect_uri` ist ungueltig
+- `400 Bad Request`: Authorization Code ist ungueltig/abgelaufen/bereits verbraucht
+- `400 Bad Request`: PKCE-Pruefung (`code_verifier`) fehlgeschlagen
+- `400 Bad Request`: Refresh Token ist ungueltig/abgelaufen/bereits verbraucht
+
+### GET /api/oidc/authorize
+
+Beschreibung: Startet den OIDC Authorization-Code-Flow mit PKCE.
+
+Query-Parameter:
+
+```text
+response_type=code
+&client_id=<client-id>
+&redirect_uri=<redirect-uri>
+&code_challenge=<pkce-challenge>
+&code_challenge_method=S256
+&state=<state>
+&nonce=<nonce>
+&scope=openid profile email offline_access
+```
+
+Erfolg (302): Weiterleitung an `LOGIN_CLIENT_URL?authorization_request_id=<id>`.
+
+Typische Fehler:
+
+- `400 Bad Request`: Pflichtparameter fehlen oder `response_type` ist ungueltig
+- `400 Bad Request`: `client_id` oder `redirect_uri` ist ungueltig
+
+### POST /api/login
+
+Beschreibung: Nimmt Benutzerdaten und eine `authentication_request_id` entgegen, authentifiziert gegen ChurchTools und gibt bei Erfolg eine Callback-URL mit Authorization Code zurueck.
+
+Request:
+
+```json
+{
+   "username": "<churchtools-user>",
+   "password": "<churchtools-password>",
+   "authentication_request_id": "<authorization-request-id>"
+}
+```
+
+Erfolg (200):
+
+```json
+{
+   "callback": "<redirect_uri>?code=<authorization-code>&state=<state>"
+}
+```
+
+Typische Fehler:
+
+- `400 Bad Request`: Payload fehlt oder Pflichtfelder fehlen
+- `400 Bad Request`: `authentication_request_id` ungueltig oder abgelaufen (> 5 Minuten)
+- `401 Unauthorized`: ChurchTools-Login nicht erfolgreich
+- `502 Bad Gateway`: ChurchTools liefert nach Login keine Benutzerdetails (ErrorNumber: 5006)
+
+### GET oder POST /api/oidc/userinfo
+
+Beschreibung: OIDC UserInfo-Endpoint gemaess OIDC Core 1.0 Section 5.3. Gibt Claims des authentifizierten Nutzers zurueck.
+
+Header:
+
+```text
+Authorization: Bearer <access_token>
+```
+
+Erfolg (200):
+
+```json
+{
+   "sub": "12345",
+   "name": "Max Mustermann",
+   "given_name": "Max",
+   "family_name": "Mustermann",
+   "email": "max@example.com",
+   "email_verified": true,
+   "st_ref": "...",
+   "scopes": ["openid", "profile", "email", "ct_group_..."]
+}
+```
+
+Typische Fehler:
+
+- `401 Unauthorized`: Kein oder ungültiger Bearer Token (ErrorNumber: 7001, 7002)
+
+### GET oder POST /api/oidc/end_session
+
+Beschreibung: OIDC Logout-Endpoint. Leitet den Benutzer nach dem Logout weiter.
+
+Query-Parameter:
+
+```text
+post_logout_redirect_uri=<uri>   (optional, muss https:// oder http://localhost beginnen)
+id_token_hint=<id_token>         (optional)
+```
+
+Erfolg: 302-Weiterleitung an `post_logout_redirect_uri` (falls angegeben) oder 200 ohne Body.
+
+Typische Fehler:
+
+- `400 Bad Request`: `post_logout_redirect_uri` ist ungueltig (ErrorNumber: 8001)
+
+### GET /api/jwks.json
+
+Beschreibung: Liefert oeffentliche Schluessel im JWKS-Format.
+
+Erfolg (200):
+
+```json
+{
+   "keys": [
+      {
+         "kid": "...",
+         "kty": "RSA",
+         "e": "...",
+         "n": "..."
+      }
+   ]
+}
+```
+
+### Client-Verwaltung (Admin)
+
+Die folgenden Endpunkte erfordern Function-Key-Authentifizierung (Query-Parameter `?code=<function_key>` oder Header `x-functions-key: <function_key>`). Sie dienen der administrativen Verwaltung von OAuth-Client-Registrierungen.
+
+#### POST /api/clients
+
+Beschreibung: Erstellt eine neue Client-Registrierung.
+
+Header:
+
+```text
+x-functions-key: <function_key>
+```
+
+Request:
+
+```json
+{
+   "name": "Meine Anwendung",
+   "owner": "admin@example.com",
+   "redirectUris": ["https://example.com/callback"]
+}
+```
+
+Erfolg (201):
+
+```json
+{
+   "clientId": "neue Client Id",
+   "name": "Meine Anwendung",
+   "owner": "admin@example.com",
+   "redirectUris": ["https://example.com/callback"]
+}
+```
+
+Typische Fehler:
+
+- `400 Bad Request`: Pflichtfelder fehlen (clientId, name, owner, redirectUris)
+- `400 Bad Request`: RedirectUris enthalten ungültige URIs (müssen mit https:// oder http://localhost/ beginnen)
+
+#### PUT /api/clients/{clientId}
+
+Beschreibung: Aktualisiert eine bestehende Client-Registrierung (partielle Updates möglich).
+
+Header:
+
+```text
+x-functions-key: <function_key>
+```
+
+Request (alle Felder optional):
+
+```json
+{
+   "name": "Neuer Name",
+   "owner": "neuer-owner@example.com",
+   "redirectUris": ["https://example.com/new-callback"]
+}
+```
+
+Erfolg (200):
+
+```json
+{
+   "clientId": "my-client",
+   "name": "Neuer Name",
+   "owner": "neuer-owner@example.com",
+   "redirectUris": ["https://example.com/new-callback"]
+}
+```
+
+Typische Fehler:
+
+- `400 Bad Request`: Kein Feld zum Update angegeben
+- `400 Bad Request`: RedirectUris enthalten ungültige URIs
+- `404 Not Found`: Client mit der angegebenen clientId nicht gefunden
+
+#### DELETE /api/clients/{clientId}
+
+Beschreibung: Löscht eine Client-Registrierung.
+
+Header:
+
+```text
+x-functions-key: <function_key>
+```
+
+Erfolg (204): Keine Response-Body.
+
+Typische Fehler:
+
+- `404 Not Found`: Client mit der angegebenen clientId nicht gefunden
+
+#### GET /api/clients
+
+Beschreibung: Listet alle registrierten Clients auf.
+
+Header:
+
+```text
+x-functions-key: <function_key>
+```
+
+Erfolg (200):
+
+```json
+{
+   "clients": [
+      {
+         "clientId": "my-client",
+         "name": "Meine Anwendung",
+         "owner": "admin@example.com",
+         "redirectUris": ["https://example.com/callback"]
+      }
+   ]
+}
+```
+
+## Fehlercodes
+
+Alle `400 Bad Request`-Antworten enthalten ein strukturiertes JSON-Objekt mit `error` (Fehlermeldung) und `errorNumber` (eindeutige Nummer):
+
+```json
+{
+   "error": "Fehlende Pflichtparameter",
+   "errorNumber": 1001
+}
+```
+
+### Authorize (1000-1099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 1001 | Fehlende Pflichtparameter | `GET /api/oidc/authorize` |
+| 1002 | response_type muss 'code' enthalten | `GET /api/oidc/authorize` |
+| 1003 | Unbekannte Client-ID | `GET /api/oidc/authorize` |
+| 1004 | Ungültige redirect_uri | `GET /api/oidc/authorize` |
+
+### Authenticate (2000-2099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 2001 | Kein gültiges Login-Objekt übergeben | `POST /api/authenticate` |
+| 2002 | Kein Benutzername oder Passwort übergeben | `POST /api/authenticate` |
+
+### Token (3000-3099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 3001 | Content-Type muss 'application/x-www-form-urlencoded' sein | `POST /api/oidc/token` |
+| 3002 | Fehlende Pflichtparameter | `POST /api/oidc/token` |
+| 3003 | grant_type muss 'authorization_code' oder 'refresh_token' sein | `POST /api/oidc/token` |
+| 3004 | Unbekannte Client-ID | `POST /api/oidc/token` |
+| 3005 | Ungültige redirect_uri | `POST /api/oidc/token` |
+| 3006 | Ungültiger Authorization Code | `POST /api/oidc/token` |
+| 3007 | Authorization Code abgelaufen | `POST /api/oidc/token` |
+| 3008 | redirect_uri stimmt nicht mit der Authorisierungsanfrage überein | `POST /api/oidc/token` |
+| 3009 | Ungültiger code_verifier | `POST /api/oidc/token` |
+
+### RefreshToken (4000-4099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 4001 | Keine Nutzlast verfügbar | `POST /api/refresh` |
+| 4002 | Kein refreshToken übermittelt | `POST /api/refresh` |
+| 4003 | Refresh und Access Token Kombination ungültig | `POST /api/refresh` |
+
+### Login (5000-5099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 5001 | Kein gültiges Login-Objekt übergeben | `POST /api/login` |
+| 5002 | Kein Benutzername oder Passwort übergeben | `POST /api/login` |
+| 5003 | Keine AuthenticationRequestId übergeben | `POST /api/login` |
+| 5004 | Ungültige AuthenticationRequestId | `POST /api/login` |
+| 5005 | AuthorizationRequest abgelaufen | `POST /api/login` |
+
+### Client Management (6000-6099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 6001 | Kein gültiges Request-Objekt übergeben | `POST /api/clients`, `PUT /api/clients/{clientId}` |
+| 6002 | ClientId fehlt oder ist leer | `POST /api/clients` |
+| 6003 | Name fehlt oder ist leer | `POST /api/clients` |
+| 6004 | Owner fehlt oder ist leer | `POST /api/clients` |
+| 6005 | RedirectUris fehlt oder ist leer | `POST /api/clients`, `PUT /api/clients/{clientId}` |
+| 6006 | Mindestens ein Feld muss für Update angegeben werden | `PUT /api/clients/{clientId}` |
+| 6007 | Client nicht gefunden | `PUT /api/clients/{clientId}`, `DELETE /api/clients/{clientId}` |
+
+### UserInfo (7000-7099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 7001 | Kein gültiger Bearer Token im Authorization-Header | `GET /api/oidc/userinfo` |
+| 7002 | Ungültiger Access Token | `GET /api/oidc/userinfo` |
+
+### EndSession (8000-8099)
+
+| Fehlercode | Beschreibung | Endpoint |
+|------------|--------------|----------|
+| 8001 | Ungültige post_logout_redirect_uri | `GET /api/oidc/end_session` |
+
+## Claims- und Scope-Modell
+
+Die erzeugten JWTs enthalten folgende Claims:
+
+| Claim | Beschreibung |
+|-------|--------------|
+| `sub` | ChurchTools-User-ID |
+| `name` | Vollstaendiger Name (Vor- und Nachname) |
+| `given_name` | Vorname |
+| `family_name` | Nachname |
+| `email` | E-Mail-Adresse |
+| `iat`, `jti` | Standard JWT-Claims |
+| `st_ref` | Referenz auf gespeicherte ChurchTools-Sessiondaten |
+| `scopes` | Mehrfach-Claim fuer ausgegebene Scopes |
+| `nonce` | Nur im `id_token`, falls bei Authorization Request angegeben |
+
+Scope-Ableitung:
+
+- OIDC-Basis-Scopes aus dem Authorization Request (`openid`, `profile`, `email`, `offline_access`) werden direkt uebernommen.
+- ChurchTools-Gruppen werden als `ct_group_<domainIdentifier>` zusaetzlich in das Token aufgenommen.
+- Mindestens `openid` ist immer enthalten.
+
+## Schluessel- und Token-Lifecycle
+
+- Access Token Laufzeit: **3600 Sekunden** (1 Stunde)
+- Refresh Token Laufzeit: **2.592.000 Sekunden** (30 Tage)
+- Private Key Laufzeit: **43200 Sekunden** (12 Stunden)
+- Refresh Tokens sind einmalig verwendbar (one-time use) und werden nach Nutzung oder Ablauf automatisch aus dem Storage entfernt.
+- `aud`-Claim im `id_token` ist im OIDC-Flow auf die `client_id` gesetzt.
+
+Hinweis: Die Schluessel liegen in Azure Table Storage und werden bei Bedarf automatisch neu erzeugt.
+
+## Persistenz in Azure Table Storage
+
+Verwendete Tabellen:
+
+- `PublicKeyTable`
+- `PrivateKeyTable`
+- `RefreshTokenTable`
+- `UserLoginTokensTable`
+- `AuthorizationRequestTable`
+- `AuthorizationCodeTable`
+- `ClientInformationTable`
+
+Gespeichert werden unter anderem:
+
+- Aktueller Private Key und zugehoeriger Public Key
+- Ausgegebene Refresh Tokens inkl. Ablaufzeit (30 Tage) und Access-Token-Bindung
+- Externe Sessionreferenzen (`st_ref`) fuer ChurchTools Login-Kontext
+- Laufende Authorization Requests inkl. PKCE-Challenge, State, Nonce, Client-ID und angefragtem Scope
+- Einmalig verwendbare Authorization Codes inkl. Benutzerdaten, Scopes und Ablaufzeit
+- Registrierte OAuth-Clients mit erlaubten `redirect_uri`-Werten
+
+## Konfiguration
+
+Erforderliche Umgebungsvariablen:
+
+- `AzureWebJobsStorage`: Verbindung zu Azure Storage
+- `FUNCTIONS_WORKER_RUNTIME=dotnet-isolated`
+- `CT_URL`: Basis-URL der ChurchTools-Instanz
+- `LOGIN_CLIENT_URL`: URL der Login-Frontend-Anwendung fuer den OIDC Authorization-Code-Flow
+
+Lokale Entwicklung erfolgt ueber [local.settings.json](local.settings.json).
+
+## Lokaler Betrieb
+
+Voraussetzungen:
+
+- .NET SDK (gem. [churchtool-idp-azfunctions.csproj](churchtool-idp-azfunctions.csproj))
+- Azure Functions Core Tools
+- Zugriff auf eine ChurchTools-Instanz
+- Gueltige Storage-Verbindung
+
+Build:
+
+```bash
+dotnet build
+```
+
+Start:
+
+```bash
+func start
+```
+
+## Logging und Betrieb
+
+- Application-Insights-Sampling ist in [host.json](host.json) aktiviert.
+- Wichtige Ablaufpunkte (Login, Refresh, Key-Laden) werden geloggt.
+- Der Dienst arbeitet upstream-abhaengig von ChurchTools und Azure Storage.
+
+## Sicherheitshinweise
+
+- Der Dienst ist fuer HTTPS-Betrieb vorgesehen.
+- Zugangsdaten werden nicht persistiert.
+- Refresh Tokens sind einmalig verwendbar (one-time use) und laufen nach 30 Tagen ab.
+- Abgelaufene Refresh Tokens werden beim naechsten Zugriff automatisch aus dem Storage entfernt.
+- Fuer Produktion sollte CORS in [local.settings.json](local.settings.json) nicht offen (`*`) betrieben werden.
+- Admin-Endpunkte zur Client-Verwaltung (`/api/clients`) erfordern Function Keys und sind fuer administrative Zwecke vorgesehen.
+
+## Bekannte Grenzen
+
+- Es wird genau eine ChurchTools-Instanz ueber `CT_URL` adressiert.
+- Fallback-Logik bei ChurchTools-/Storage-Ausfall ist nicht enthalten.
+
 
 ## Ziel des Projekts
 
