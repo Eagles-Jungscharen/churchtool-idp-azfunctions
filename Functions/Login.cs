@@ -91,7 +91,15 @@ public class Login(ICTLoginService loginService, IJWTService jwtService, ILogger
                 };
             }
             List<CTGroupContainer> groups = await _loginService.GetGroups(loginResult.SetCookieHeader!, ctWhoami.Id);
-            List<string> scopes = [.. groups.Select(gc => "ct_group_" + gc.Group?.DomainIdentifier)];
+            // OIDC-Basis-Scopes aus dem AuthorizationRequest extrahieren und mit CT-Gruppen-Scopes zusammenführen
+            var requestedOidcScopes = (authorizationRequest.Scope ?? "openid")
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Where(s => s is "openid" or "profile" or "email" or "offline_access")
+                .ToList();
+            if (!requestedOidcScopes.Contains("openid"))
+                requestedOidcScopes.Insert(0, "openid");
+            var ctGroupScopes = groups.Select(gc => "ct_group_" + gc.Group?.DomainIdentifier);
+            List<string> scopes = [.. requestedOidcScopes, .. ctGroupScopes];
             var loginToken = await _loginService.GetLoginToken(loginResult.SetCookieHeader!, ctWhoami.Id);
             var stRef = await _userTokenService.StoreToken(loginResult.SetCookieHeader!, loginToken);
 

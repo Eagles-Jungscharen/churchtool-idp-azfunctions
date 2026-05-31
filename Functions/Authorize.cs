@@ -28,6 +28,7 @@ public class Authorize(ILogger<Authorize> logger, IOptions<ServiceConfiguration>
         string? codeChallengeMethod = req.Query["code_challenge_method"];
         string? state = req.Query["state"];
         string? nonce = req.Query["nonce"];
+        string? scope = req.Query["scope"];
 
         if (string.IsNullOrWhiteSpace(responseType) ||
             string.IsNullOrWhiteSpace(clientId) ||
@@ -71,7 +72,7 @@ public class Authorize(ILogger<Authorize> logger, IOptions<ServiceConfiguration>
             });
         }
 
-        var request = await _authorizationRequestService.StoreAuthorizationRequestAsync(codeChallenge, codeChallengeMethod, redirectUri, state, nonce, clientId);
+        var request = await _authorizationRequestService.StoreAuthorizationRequestAsync(codeChallenge, codeChallengeMethod, redirectUri, state, nonce, clientId, scope);
         _logger.LogInformation("Authorization request stored for client {ClientId}", clientId);
 
         return new RedirectResult($"{_serviceConfiguration.LoginClientURL}?authorization_request_id={request.Id}", false);

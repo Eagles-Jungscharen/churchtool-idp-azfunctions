@@ -38,14 +38,15 @@ public class OpenIdConfigurationFunction
 
             // Empfohlene unterstützte Werte
             GrantTypesSupported = ["authorization_code", "refresh_token"],
-            ScopesSupported = ["openid"],
+            ScopesSupported = ["openid", "profile", "email", "offline_access"],
             ClaimsSupported = [
                 "sub",
+                "name",
+                "given_name",
+                "family_name",
+                "email",
                 "iat",
                 "jti",
-                "firstname",
-                "lastname",
-                "email",
                 "st_ref",
                 "scopes"
             ],

@@ -21,6 +21,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
     public class JWTService(ExtendedAzureTableClientService tableClientService, ILogger<JWTService> logger) : IJWTService {
 
         public static readonly int Expires_In_AccessToken = 3600;
+        public static readonly int Expires_In_RefreshToken = 60 * 60 * 24 * 30; // 30 Tage
         public static readonly int Expires_In_PrivateKey = 43200;
         private readonly TypedAzureTableClient<PublicKey> _publicKeyTableClient =
         tableClientService.GetTypedTableClient<PublicKey>();
@@ -139,6 +140,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
                 new Claim(JwtRegisteredClaimNames.Sub, whoami.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Iat, timeStamp, ClaimValueTypes.Integer64),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                new Claim(JwtRegisteredClaimNames.Name, $"{whoami.FirstName} {whoami.LastName}".Trim()),
                 new Claim("firstname", whoami.FirstName ?? ""),
                 new Claim("lastname", whoami.LastName ?? ""),
                 new Claim("email", whoami.Email ?? ""),
@@ -177,7 +179,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
         }
 
         private async Task<string> CreateRefreshToken(string accessToken) {
-            DateTime expiresIn = DateTime.UtcNow.AddSeconds(Expires_In_AccessToken);
+            DateTime expiresIn = DateTime.UtcNow.AddSeconds(Expires_In_RefreshToken);
             string refreshToken = Guid.NewGuid().ToString();
             RefreshToken rtTE = new()
             {
@@ -197,7 +199,11 @@ namespace EaglesJungscharen.CT.IDP.Services {
                     _logger.LogInformation("Refresh token not found: {RefreshToken}", refreshToken);
                     return false;
                 }
-
+                if (token.Expires < DateTime.UtcNow) {
+                    await _refreshTokenTableClient.DeleteEntityAsync(token.RefreshTokenValue, "REFRESH_TOKEN");
+                    _logger.LogInformation("Refresh token expired: {RefreshToken}", refreshToken);
+                    return false;
+                }
                 if (token.AccessToken == accessToken) {
                     await _refreshTokenTableClient.DeleteEntityAsync(token.RefreshTokenValue, "REFRESH_TOKEN");
                     return true;
@@ -231,6 +237,11 @@ namespace EaglesJungscharen.CT.IDP.Services {
                 var storedToken = response?.Entity;
                 if (storedToken == null) {
                     _logger.LogInformation("Refresh token not found: {RefreshToken}", refreshToken);
+                    return null;
+                }
+                if (storedToken.Expires < DateTime.UtcNow) {
+                    await _refreshTokenTableClient.DeleteEntityAsync(storedToken.RefreshTokenValue, "REFRESH_TOKEN");
+                    _logger.LogInformation("Refresh token expired: {RefreshToken}", refreshToken);
                     return null;
                 }
                 await _refreshTokenTableClient.DeleteEntityAsync(storedToken.RefreshTokenValue, "REFRESH_TOKEN");

@@ -106,7 +106,6 @@ public class Token(
                 ErrorNumber = ErrorCodes.TokenInvalidAuthorizationCode
             });
         }
-
         return new OkObjectResult(tokens);
     }
 

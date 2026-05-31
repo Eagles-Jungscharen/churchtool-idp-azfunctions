@@ -5,7 +5,7 @@ namespace EaglesJungscharen.CT.IDP.Services;
 
 public interface IAuthorizationRequestService
 {
-    Task<AuthorizationRequest> StoreAuthorizationRequestAsync(string codeChallenge, string codeChallengeMethod, string callbackUrl, string state, string? nonce = null, string? clientId = null);
+    Task<AuthorizationRequest> StoreAuthorizationRequestAsync(string codeChallenge, string codeChallengeMethod, string callbackUrl, string state, string? nonce = null, string? clientId = null, string? scope = null);
     Task<AuthorizationRequest?> GetAuthorizationRequestByIdAsync(string id);
 }
 
@@ -14,7 +14,7 @@ public class AuthorizationRequestService(ExtendedAzureTableClientService tableCl
     private readonly TypedAzureTableClient<AuthorizationRequest> _tableClient =
         tableClientService.GetTypedTableClient<AuthorizationRequest>();
 
-    public async Task<AuthorizationRequest> StoreAuthorizationRequestAsync(string codeChallenge, string codeChallengeMethod, string callbackUrl, string state, string? nonce = null, string? clientId = null)
+    public async Task<AuthorizationRequest> StoreAuthorizationRequestAsync(string codeChallenge, string codeChallengeMethod, string callbackUrl, string state, string? nonce = null, string? clientId = null, string? scope = null)
     {
         var authorizationRequest = new AuthorizationRequest
         {
@@ -25,6 +25,7 @@ public class AuthorizationRequestService(ExtendedAzureTableClientService tableCl
             State = state,
             Nonce = nonce,
             ClientId = clientId,
+            Scope = scope,
             CreatedAt = DateTime.UtcNow
         };
 

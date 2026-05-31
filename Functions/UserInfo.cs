@@ -50,12 +50,17 @@ public class UserInfo(ILogger<UserInfo> logger)
         }
 
         // Standard OIDC Claims aus dem JWT extrahieren und zurückgeben
+        var firstName = jwt.Claims.FirstOrDefault(c => c.Type == "firstname")?.Value ?? "";
+        var lastName = jwt.Claims.FirstOrDefault(c => c.Type == "lastname")?.Value ?? "";
+        var name = $"{firstName} {lastName}".Trim();
+
         var claims = new Dictionary<string, object?>
         {
             ["sub"] = jwt.Claims.FirstOrDefault(c => c.Type == JwtRegisteredClaimNames.Sub)?.Value,
+            ["name"] = string.IsNullOrWhiteSpace(name) ? null : name,
+            ["given_name"] = string.IsNullOrWhiteSpace(firstName) ? null : firstName,
+            ["family_name"] = string.IsNullOrWhiteSpace(lastName) ? null : lastName,
             ["email"] = jwt.Claims.FirstOrDefault(c => c.Type == "email")?.Value,
-            ["given_name"] = jwt.Claims.FirstOrDefault(c => c.Type == "firstname")?.Value,
-            ["family_name"] = jwt.Claims.FirstOrDefault(c => c.Type == "lastname")?.Value,
             ["st_ref"] = jwt.Claims.FirstOrDefault(c => c.Type == "st_ref")?.Value,
         };
 
