@@ -20,7 +20,7 @@ namespace EaglesJungscharen.CT.IDP.Services {
 
     public class JWTService(ExtendedAzureTableClientService tableClientService, ILogger<JWTService> logger) : IJWTService {
 
-        public static readonly int Expires_In_AccessToken = 3600;
+        public static readonly int Expires_In_AccessToken = 900; // 15 Minuten
         public static readonly int Expires_In_RefreshToken = 60 * 60 * 24 * 30; // 30 Tage
         public static readonly int Expires_In_PrivateKey = 43200;
         private readonly TypedAzureTableClient<PublicKey> _publicKeyTableClient =
@@ -141,9 +141,9 @@ namespace EaglesJungscharen.CT.IDP.Services {
                 new Claim(JwtRegisteredClaimNames.Iat, timeStamp, ClaimValueTypes.Integer64),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(JwtRegisteredClaimNames.Name, $"{whoami.FirstName} {whoami.LastName}".Trim()),
-                new Claim("firstname", whoami.FirstName ?? ""),
-                new Claim("lastname", whoami.LastName ?? ""),
-                new Claim("email", whoami.Email ?? ""),
+                new Claim(JwtRegisteredClaimNames.GivenName, whoami.FirstName ?? ""),
+                new Claim(JwtRegisteredClaimNames.FamilyName, whoami.LastName ?? ""),
+                new Claim(JwtRegisteredClaimNames.Email, whoami.Email ?? ""),
                 new Claim("st_ref", extRef),
             ];
             if (!string.IsNullOrEmpty(nonce)) {
