@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
-namespace EaglesJungscharen.CT.IDP.Functions;
+namespace EaglesJungscharen.CT.IDP.Functions.Oidc;
 
 /// <summary>
 /// OpenID Connect End-Session-Endpoint gemäß OIDC Session Management 1.0

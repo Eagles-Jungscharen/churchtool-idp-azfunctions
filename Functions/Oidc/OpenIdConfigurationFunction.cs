@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using EaglesJungscharen.CT.IDP.Models;
 
-namespace EaglesJungscharen.CT.IDP.Functions;
+namespace EaglesJungscharen.CT.IDP.Functions.Oidc;
 
 /// <summary>
 /// OpenID Connect Discovery-Endpoint gemäß OpenID Connect Discovery 1.0 Spezifikation

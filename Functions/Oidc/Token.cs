@@ -9,7 +9,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
-namespace EaglesJungscharen.CT.IDP.Functions;
+namespace EaglesJungscharen.CT.IDP.Functions.Oidc;
 
 public class Token(
     ILogger<Token> logger,

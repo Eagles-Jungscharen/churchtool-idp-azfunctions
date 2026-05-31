@@ -3,15 +3,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using EaglesJungscharen.CT.IDP.Models;
-using EaglesJungscharen.CT.IDP.Models.ChurchTools;
 using EaglesJungscharen.CT.IDP.Services;
 
 namespace EaglesJungscharen.CT.IDP.Functions;
 
-public class Login(ICTLoginService loginService, IJWTService jwtService, ILogger<Login> logger, UserTokenService userTokenService, IAuthorizationRequestService authorizationRequestService, IAuthorizationCodeService authorizationCodeService)
+public class Login(ICTLoginService loginService, ILogger<Login> logger, UserTokenService userTokenService, IAuthorizationRequestService authorizationRequestService, IAuthorizationCodeService authorizationCodeService)
 {
     private readonly ICTLoginService _loginService = loginService;
-    private readonly IJWTService _jwtService = jwtService;
     private readonly ILogger<Login> _logger = logger;
     private readonly UserTokenService _userTokenService = userTokenService;
     private readonly IAuthorizationRequestService _authorizationRequestService = authorizationRequestService;
@@ -90,7 +88,6 @@ public class Login(ICTLoginService loginService, IJWTService jwtService, ILogger
                     StatusCode = StatusCodes.Status502BadGateway
                 };
             }
-            List<CTGroupContainer> groups = await _loginService.GetGroups(loginResult.SetCookieHeader!, ctWhoami.Id);
             // OIDC-Basis-Scopes aus dem AuthorizationRequest extrahieren und mit CT-Gruppen-Scopes zusammenführen
             var requestedOidcScopes = (authorizationRequest.Scope ?? "openid")
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -98,12 +95,10 @@ public class Login(ICTLoginService loginService, IJWTService jwtService, ILogger
                 .ToList();
             if (!requestedOidcScopes.Contains("openid"))
                 requestedOidcScopes.Insert(0, "openid");
-            var ctGroupScopes = groups.Select(gc => "ct_group_" + gc.Group?.DomainIdentifier);
-            List<string> scopes = [.. requestedOidcScopes, .. ctGroupScopes];
             var loginToken = await _loginService.GetLoginToken(loginResult.SetCookieHeader!, ctWhoami.Id);
             var stRef = await _userTokenService.StoreToken(loginResult.SetCookieHeader!, loginToken);
 
-            var authorizationCode = await _authorizationCodeService.StoreAuthorizationCodeAsync(ctWhoami, scopes, stRef, authorizationRequest);
+            var authorizationCode = await _authorizationCodeService.StoreAuthorizationCodeAsync(ctWhoami, requestedOidcScopes, stRef, authorizationRequest);
             return new OkObjectResult(new {callback=$"{authorizationRequest.CallbackUrl}?code={Uri.EscapeDataString(authorizationCode.Id)}&state={Uri.EscapeDataString(authorizationRequest.State)}"});
         }
 

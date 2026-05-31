@@ -6,7 +6,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace EaglesJungscharen.CT.IDP.Functions;
+namespace EaglesJungscharen.CT.IDP.Functions.Oidc;
 
 public class Authorize(ILogger<Authorize> logger, IOptions<ServiceConfiguration> serviceConfiguration, IClientInformationService clientInformationService, IAuthorizationRequestService authorizationRequestService)
 {
