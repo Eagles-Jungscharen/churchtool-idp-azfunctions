@@ -61,6 +61,7 @@ public class UserInfo(ILogger<UserInfo> logger)
             ["given_name"] = string.IsNullOrWhiteSpace(firstName) ? null : firstName,
             ["family_name"] = string.IsNullOrWhiteSpace(lastName) ? null : lastName,
             ["email"] = jwt.Claims.FirstOrDefault(c => c.Type == "email")?.Value,
+            ["email_verified"] = true,
             ["st_ref"] = jwt.Claims.FirstOrDefault(c => c.Type == "st_ref")?.Value,
         };
 

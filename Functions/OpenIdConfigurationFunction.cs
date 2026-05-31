@@ -45,6 +45,7 @@ public class OpenIdConfigurationFunction
                 "given_name",
                 "family_name",
                 "email",
+                "email_verified",
                 "iat",
                 "jti",
                 "st_ref",
