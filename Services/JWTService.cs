@@ -23,7 +23,8 @@ namespace EaglesJungscharen.CT.IDP.Services {
 
         public static readonly int Expires_In_AccessToken = 900; // 15 Minuten
         public static readonly int Expires_In_RefreshToken = 60 * 60 * 24 * 30; // 30 Tage
-        public static readonly int Expires_In_PrivateKey = 43200;
+        public static readonly int Expires_In_PrivateKey = 60 * 60 * 24 * 2; // 2 Tage
+        public static readonly int Expires_In_PublicKey = 60 * 60 * 24 * 2 + 60 * 60 * 4; // 2 Tage + 4 Stunden Überlappung
         private readonly TypedAzureTableClient<PublicKey> _publicKeyTableClient =
         tableClientService.GetTypedTableClient<PublicKey>();
         private readonly TypedAzureTableClient<PrivateKey> _privateKeyTableClient =
@@ -41,10 +42,10 @@ namespace EaglesJungscharen.CT.IDP.Services {
            RSA rsa = RSA.Create();
            _privateRSAKey = rsa;
            _keyId = Guid.NewGuid().ToString();
-           DateTime expiresIn = DateTime.UtcNow;
-           expiresIn = expiresIn.AddSeconds(Expires_In_PrivateKey);
-           await StorePublicKey(_keyId, rsa.ExportRSAPublicKey(), expiresIn);
-           await StorePrivateKey(_keyId, rsa.ExportRSAPrivateKey(), expiresIn);
+           DateTime privateKeyExpiry = DateTime.UtcNow.AddSeconds(Expires_In_PrivateKey);
+           DateTime publicKeyExpiry = DateTime.UtcNow.AddSeconds(Expires_In_PublicKey);
+           await StorePublicKey(_keyId, rsa.ExportRSAPublicKey(), publicKeyExpiry);
+           await StorePrivateKey(_keyId, rsa.ExportRSAPrivateKey(), privateKeyExpiry);
         }
 
         private async Task StorePublicKey(string keyId, byte[] pkAsBytes, DateTime expiresIn) {
