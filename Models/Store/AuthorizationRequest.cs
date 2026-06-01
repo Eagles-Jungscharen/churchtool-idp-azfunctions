@@ -6,5 +6,8 @@ public class AuthorizationRequest
     public required string CodeChallengeMethod { get; set; }
     public required string CallbackUrl { get; set; }
     public required string State { get; set; }
+    public string? Nonce { get; set; }
+    public string? ClientId { get; set; }
+    public string? Scope { get; set; }
     public DateTime CreatedAt { get; set; }
 }

@@ -23,5 +23,9 @@ public class AuthorizationCode
 
     public string? StRef { get; set; }
 
+    public string? Nonce { get; set; }
+
+    public string? ClientId { get; set; }
+
     public DateTime CreatedAt { get; set; }
 }

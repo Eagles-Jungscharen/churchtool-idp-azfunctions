@@ -2,32 +2,38 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Azure.Functions.Worker;
 using EaglesJungscharen.CT.IDP.Models;
+using EaglesJungscharen.CT.IDP.Services;
+using Microsoft.Extensions.Logging;
 
-namespace EaglesJungscharen.CT.IDP.Functions;
+namespace EaglesJungscharen.CT.IDP.Functions.Oidc;
 
 /// <summary>
 /// OpenID Connect Discovery-Endpoint gemäß OpenID Connect Discovery 1.0 Spezifikation
 /// Stellt Metadaten über den Identity Provider bereit, damit Clients automatisch konfiguriert werden können
 /// </summary>
-public class OpenIdConfigurationFunction
+public class OpenIdConfigurationFunction(ILogger<OpenIdConfigurationFunction> logger, IJWTService jwtService)
 {
+    private readonly ILogger<OpenIdConfigurationFunction> _logger = logger;
+    private readonly IJWTService _jwtService = jwtService;
     [Function("openid-configuration")]
-    public IActionResult Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "oidc/.well-known/openid-configuration")] HttpRequest req)
+    public async Task<IActionResult> Run([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "oidc/.well-known/openid-configuration")] HttpRequest req)
     {
         // Base-URL dynamisch aus Request ermitteln (funktioniert lokal und in Azure)
         var baseUrl = $"{req.Scheme}://{req.Host.Value}";
         var apiPrefix = "/api";
-
+        _logger.LogInformation("OpenID Configuration requested. Base URL: {BaseUrl}", baseUrl);
+        await _jwtService.CheckKeys();
         var configuration = new OpenIdConfiguration
         {
             // Issuer - muss mit iss-Claim in JWTs übereinstimmen
-            Issuer = "CT_IDP",
+            Issuer = $"{baseUrl}{apiPrefix}/oidc",
 
             // Erforderliche Endpoints
             AuthorizationEndpoint = $"{baseUrl}{apiPrefix}/oidc/authorize",
             TokenEndpoint = $"{baseUrl}{apiPrefix}/oidc/token",
             JwksUri = $"{baseUrl}{apiPrefix}/jwks.json",
+            UserInfoEndpoint = $"{baseUrl}{apiPrefix}/oidc/userinfo",
+            EndSessionEndpoint = $"{baseUrl}{apiPrefix}/oidc/end_session",
 
             // Erforderliche unterstützte Werte
             ResponseTypesSupported = ["code"],
@@ -35,15 +41,17 @@ public class OpenIdConfigurationFunction
             IdTokenSigningAlgValuesSupported = ["RS256"],
 
             // Empfohlene unterstützte Werte
-            GrantTypesSupported = ["authorization_code"],
-            ScopesSupported = ["openid"],
+            GrantTypesSupported = ["authorization_code", "refresh_token"],
+            ScopesSupported = ["openid", "profile", "email", "offline_access"],
             ClaimsSupported = [
                 "sub",
+                "name",
+                "given_name",
+                "family_name",
+                "email",
+                "email_verified",
                 "iat",
                 "jti",
-                "firstname",
-                "lastname",
-                "email",
                 "st_ref",
                 "scopes"
             ],

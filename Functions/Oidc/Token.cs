@@ -9,7 +9,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
-namespace EaglesJungscharen.CT.IDP.Functions;
+namespace EaglesJungscharen.CT.IDP.Functions.Oidc;
 
 public class Token(
     ILogger<Token> logger,
@@ -40,20 +40,10 @@ public class Token(
         }
 
         var form = await req.ReadFormAsync();
-        var tokenRequest = new TokenRequest
-        {
-            GrantType = form["grant_type"],
-            Code = form["code"],
-            CodeVerifier = form["code_verifier"],
-            ClientId = form["client_id"],
-            RedirectUri = form["redirect_uri"]
-        };
+        string? grantType = form["grant_type"];
+        string? clientId = form["client_id"];
 
-        if (string.IsNullOrWhiteSpace(tokenRequest.GrantType) ||
-            string.IsNullOrWhiteSpace(tokenRequest.Code) ||
-            string.IsNullOrWhiteSpace(tokenRequest.CodeVerifier) ||
-            string.IsNullOrWhiteSpace(tokenRequest.ClientId) ||
-            string.IsNullOrWhiteSpace(tokenRequest.RedirectUri))
+        if (string.IsNullOrWhiteSpace(grantType))
         {
             return new BadRequestObjectResult(new ErrorRecord
             {
@@ -62,12 +52,84 @@ public class Token(
             });
         }
 
-        if (!string.Equals(tokenRequest.GrantType, "authorization_code", StringComparison.Ordinal))
+        string issuer = $"{req.Scheme}://{req.Host.Value}/api/oidc";
+
+        // Refresh Token Grant (RFC 6749, Section 6)
+        if (string.Equals(grantType, "refresh_token", StringComparison.Ordinal))
+        {
+            return await HandleRefreshTokenGrant(form, clientId, issuer);
+        }
+
+        // Authorization Code Grant
+        if (!string.Equals(grantType, "authorization_code", StringComparison.Ordinal))
         {
             return new BadRequestObjectResult(new ErrorRecord
             {
-                Error = "grant_type muss 'authorization_code' sein",
+                Error = "grant_type muss 'authorization_code' oder 'refresh_token' sein",
                 ErrorNumber = ErrorCodes.TokenInvalidGrantType
+            });
+        }
+
+        return await HandleAuthorizationCodeGrant(form, clientId, issuer);
+    }
+
+    private async Task<IActionResult> HandleRefreshTokenGrant(IFormCollection form, string? clientId, string issuer)
+    {
+        string? refreshToken = form["refresh_token"];
+
+        if (string.IsNullOrWhiteSpace(refreshToken) || string.IsNullOrWhiteSpace(clientId))
+        {
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Fehlende Pflichtparameter für refresh_token Grant",
+                ErrorNumber = ErrorCodes.TokenMissingParameters
+            });
+        }
+
+        var clientInformation = await _clientInformationService.GetClientInformationByIdAsync(clientId);
+        if (clientInformation == null)
+        {
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = $"Unbekannte Client-ID '{clientId}'",
+                ErrorNumber = ErrorCodes.TokenUnknownClientId
+            });
+        }
+
+        _logger.LogInformation("Refresh token grant requested for client {ClientId}", clientId);
+        var tokens = await _jwtService.UseRefreshTokenAsync(refreshToken, issuer, clientId);
+        if (tokens == null)
+        {
+            _logger.LogWarning("Ungültiger oder abgelaufener Refresh Token für client {ClientId} / {RefreshToken}", clientId, refreshToken);
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Ungültiger oder abgelaufener Refresh Token",
+                ErrorNumber = ErrorCodes.TokenInvalidAuthorizationCode
+            });
+        }
+        return new OkObjectResult(tokens);
+    }
+
+    private async Task<IActionResult> HandleAuthorizationCodeGrant(IFormCollection form, string? clientId, string issuer)
+    {
+        var tokenRequest = new TokenRequest
+        {
+            GrantType = form["grant_type"],
+            Code = form["code"],
+            CodeVerifier = form["code_verifier"],
+            ClientId = clientId,
+            RedirectUri = form["redirect_uri"]
+        };
+
+        if (string.IsNullOrWhiteSpace(tokenRequest.Code) ||
+            string.IsNullOrWhiteSpace(tokenRequest.CodeVerifier) ||
+            string.IsNullOrWhiteSpace(tokenRequest.ClientId) ||
+            string.IsNullOrWhiteSpace(tokenRequest.RedirectUri))
+        {
+            return new BadRequestObjectResult(new ErrorRecord
+            {
+                Error = "Fehlende Pflichtparameter",
+                ErrorNumber = ErrorCodes.TokenMissingParameters
             });
         }
 
@@ -146,7 +208,9 @@ public class Token(
             Email = authorizationCode.Email
         };
 
-        var tokens = await _jwtService.BuildJWTToken(ctWhoami, authorizationCode.Scopes, authorizationCode.StRef);
+        // audience = client_id (RFC: oidc-client-ts validates id_token.aud == client_id)
+        string audience = tokenRequest.ClientId;
+        var tokens = await _jwtService.BuildJWTToken(ctWhoami, authorizationCode.Scopes, authorizationCode.StRef, issuer, audience, authorizationCode.Nonce);
         await _authorizationCodeService.DeleteAuthorizationCodeAsync(tokenRequest.Code);
 
         return new OkObjectResult(tokens);
@@ -175,3 +239,4 @@ public class Token(
                CryptographicOperations.FixedTimeEquals(expectedBytes, actualBytes);
     }
 }
+
