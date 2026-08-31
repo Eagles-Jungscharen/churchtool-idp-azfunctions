@@ -37,7 +37,13 @@ public class CTLoginService(HttpClient httpClient, ILogger<CTLoginService> logge
             string cookieHeaders = "";
             if (response.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? cookHeaderValues))
             {
-                cookieHeaders = cookHeaderValues.First();
+                foreach(var value in cookHeaderValues)
+                {
+                    _logger.LogInformation("Set-Cookie header value: {Value}", value);
+                }
+                cookieHeaders = cookHeaderValues.FirstOrDefault(value => value.StartsWith("ChurchToolsV2")) ?? "";
+            } else {
+                _logger.LogInformation("No Set-Cookie header found in the response");
             }
             return new LoginResult()
             {
