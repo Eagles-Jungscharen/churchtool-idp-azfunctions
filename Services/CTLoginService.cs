@@ -9,9 +9,8 @@ namespace EaglesJungscharen.CT.IDP.Services;
 public interface ICTLoginService
 {
     Task<LoginResult> DoLogin(string userName, string password);
-    Task<CTWhoami?> GetWhoAmi(string setCookieHeader);
-    Task<List<CTGroupContainer>> GetGroups(string setCookieHeader, int id);
-    Task<string> GetLoginToken(string setCookieHeader, int id);
+    Task<CTWhoami?> GetWhoAmi(string loginToken, int id);
+    Task<List<CTGroupContainer>> GetGroups(string loginToken, int id);
 }
 
 public class CTLoginService(HttpClient httpClient, ILogger<CTLoginService> logger) : ICTLoginService
@@ -22,34 +21,18 @@ public class CTLoginService(HttpClient httpClient, ILogger<CTLoginService> logge
 
     public async Task<LoginResult> DoLogin(string userName, string password)
     {
-        List<KeyValuePair<string, string>> parameters =
-        [
-            new KeyValuePair<string, string>("username", userName),
-            new KeyValuePair<string, string>("password", password),
-        ];
-        HttpContent content = new FormUrlEncodedContent(parameters);
-
-        HttpResponseMessage response = await _httpClient.PostAsync($"{_cturl}/api/login", content);
+        var payload = new { username = userName, password = password };
+        var content = new StringContent(System.Text.Json.JsonSerializer.Serialize(payload), System.Text.Encoding.UTF8, "application/json");
+        
+        HttpResponseMessage response = await _httpClient.PostAsync($"{_cturl}/api/login/token", content);
         if (response.IsSuccessStatusCode)
         {
-            var result = await response.Content.ReadFromJsonAsync<CTResponse<CTLoginResponse>>();
-            CTLoginResponse? cTLoginResponse = result?.Data;
-            string cookieHeaders = "";
-            if (response.Headers.TryGetValues("Set-Cookie", out IEnumerable<string>? cookHeaderValues))
-            {
-                foreach(var value in cookHeaderValues)
-                {
-                    _logger.LogInformation("Set-Cookie header value: {Value}", value);
-                }
-                cookieHeaders = cookHeaderValues.FirstOrDefault(value => value.StartsWith("ChurchToolsV2")) ?? "";
-            } else {
-                _logger.LogInformation("No Set-Cookie header found in the response");
-            }
+            var result = await response.Content.ReadFromJsonAsync<CTResponse<CTLoginTokenResponse>>();
+            CTLoginTokenResponse? cTLoginResponse = result?.Data;
             return new LoginResult()
             {
                 Error = false,
                 CTLoginResponse = cTLoginResponse,
-                SetCookieHeader = cookieHeaders
             };
         }
         else
@@ -70,39 +53,21 @@ public class CTLoginService(HttpClient httpClient, ILogger<CTLoginService> logge
         return lr;
     }
 
-    public async Task<CTWhoami?> GetWhoAmi(string setCookieHeader)
+    public async Task<CTWhoami?> GetWhoAmi(string loginToken, int id)
     {
-        HttpRequestMessage request = new(HttpMethod.Get, _cturl + "/api/whoami?only_allow_authenticated=true");
-        CookieContainer container = new();
-        Uri ctUri = new(_cturl);
-        container.SetCookies(ctUri, setCookieHeader);
-        request.Headers.Add("Cookie", container.GetCookieHeader(ctUri));
+        HttpRequestMessage request = new(HttpMethod.Get, _cturl + $"/api/persons/{id}");
+        request.Headers.Add("Authorization", $"Login {loginToken}");
         HttpResponseMessage response = await _httpClient.SendAsync(request);
         var result = await response.Content.ReadFromJsonAsync<CTResponse<CTWhoami>>();
         return result?.Data ?? null;
     }
 
-    public async Task<List<CTGroupContainer>> GetGroups(string setCookieHeader, int id)
+    public async Task<List<CTGroupContainer>> GetGroups(string loginToken, int id)
     {
         HttpRequestMessage request = new(HttpMethod.Get, $"{_cturl}/api/persons/{id}/groups");
-        CookieContainer container = new();
-        Uri ctUri = new(_cturl);
-        container.SetCookies(ctUri, setCookieHeader);
-        request.Headers.Add("Cookie", container.GetCookieHeader(ctUri));
+        request.Headers.Add("Authorization", $"Login {loginToken}");
         HttpResponseMessage response = await _httpClient.SendAsync(request);
         var result = await response.Content.ReadFromJsonAsync<CTResponse<List<CTGroupContainer>>>();
         return result?.Data ?? [];
-    }
-
-    public async Task<string> GetLoginToken(string setCookieHeader, int id)
-    {
-        HttpRequestMessage request = new(HttpMethod.Get, $"{_cturl}/api/persons/{id}/logintoken");
-        CookieContainer container = new();
-        Uri ctUri = new(_cturl);
-        container.SetCookies(ctUri, setCookieHeader);
-        request.Headers.Add("Cookie", container.GetCookieHeader(ctUri));
-        HttpResponseMessage response = await _httpClient.SendAsync(request);
-        var result = await response.Content.ReadFromJsonAsync<CTResponse<string>>();
-        return result?.Data ?? string.Empty;
     }
 }

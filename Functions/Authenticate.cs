@@ -46,7 +46,8 @@ public class Authenticate(ICTLoginService loginService, IJWTService jwtService, 
         LoginResult loginResult = await _loginService.DoLogin(username, password);
         if (!loginResult.Error)
         {
-            var ctWhoami = await _loginService.GetWhoAmi(loginResult.SetCookieHeader!);
+            var ctResponse = loginResult.CTLoginResponse;
+            var ctWhoami = await _loginService.GetWhoAmi(ctResponse!.Token!, ctResponse.PersonId!);
             if (ctWhoami == null)
             {
                 _logger.LogWarning("ChurchTools hatte keine Benutzerdetails nach erfolgreichem Login zurückgegeben.");
@@ -59,10 +60,9 @@ public class Authenticate(ICTLoginService loginService, IJWTService jwtService, 
                     StatusCode = StatusCodes.Status502BadGateway
                 };
             }
-            List<CTGroupContainer> groups = await _loginService.GetGroups(loginResult.SetCookieHeader!, ctWhoami.Id);
+            List<CTGroupContainer> groups = await _loginService.GetGroups(ctResponse!.Token!, ctWhoami.Id);
             List<string> scopes = [.. groups.Select(gc => "ct_group_" + gc.Group?.DomainIdentifier)];
-            var loginToken = await _loginService.GetLoginToken(loginResult.SetCookieHeader!, ctWhoami.Id);
-            var extRef = await _userTokenService.StoreToken(loginResult.SetCookieHeader!, loginToken);
+            var extRef = await _userTokenService.StoreToken("--", ctResponse!.Token!);
             string issuer = $"{req.Scheme}://{req.Host.Value}/api/oidc";
             Tokens tokens = await _jwtService.BuildJWTToken(ctWhoami, scopes, extRef, issuer, "ct-auth");
             return new OkObjectResult(tokens);

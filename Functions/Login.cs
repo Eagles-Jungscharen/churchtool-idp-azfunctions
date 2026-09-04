@@ -75,7 +75,8 @@ public class Login(ICTLoginService loginService, ILogger<Login> logger, UserToke
         LoginResult loginResult = await _loginService.DoLogin(username, password);
         if (!loginResult.Error)
         {
-            var ctWhoami = await _loginService.GetWhoAmi(loginResult.SetCookieHeader!);
+            var ctResponse = loginResult.CTLoginResponse;
+            var ctWhoami = await _loginService.GetWhoAmi(ctResponse!.Token!, ctResponse.PersonId!);
             if (ctWhoami == null)
             {
                 _logger.LogWarning("ChurchTools returned no user details after successful login.");
@@ -95,8 +96,7 @@ public class Login(ICTLoginService loginService, ILogger<Login> logger, UserToke
                 .ToList();
             if (!requestedOidcScopes.Contains("openid"))
                 requestedOidcScopes.Insert(0, "openid");
-            var loginToken = await _loginService.GetLoginToken(loginResult.SetCookieHeader!, ctWhoami.Id);
-            var stRef = await _userTokenService.StoreToken(loginResult.SetCookieHeader!, loginToken);
+            var stRef = await _userTokenService.StoreToken("--", ctResponse!.Token!);
 
             var authorizationCode = await _authorizationCodeService.StoreAuthorizationCodeAsync(ctWhoami, requestedOidcScopes, stRef, authorizationRequest);
             return new OkObjectResult(new {callback=$"{authorizationRequest.CallbackUrl}?code={Uri.EscapeDataString(authorizationCode.Id)}&state={Uri.EscapeDataString(authorizationRequest.State)}"});
